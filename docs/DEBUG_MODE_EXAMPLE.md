@@ -9,12 +9,12 @@
 ### 正常模式（无 --debug）
 
 ```bash
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 ```
 
 **输出：**
 ```
-🚀 SuperTail 启动 - 监控 java 格式日志
+🚀 AIPipe 启动 - 监控 java 格式日志
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📁 监控文件: /var/log/app.log
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -28,12 +28,12 @@
 ### Debug 模式（带 --debug）
 
 ```bash
-./supertail -f /var/log/app.log --format java --debug
+./aipipe -f /var/log/app.log --format java --debug
 ```
 
 **输出：**
 ```
-🚀 SuperTail 启动 - 监控 java 格式日志
+🚀 AIPipe 启动 - 监控 java 格式日志
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📁 监控文件: /var/log/app.log
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -117,7 +117,7 @@ Response Body:
 当 API 调用失败时，debug 模式可以帮助你：
 
 ```bash
-./supertail -f /var/log/app.log --format java --debug
+./aipipe -f /var/log/app.log --format java --debug
 ```
 
 检查：
@@ -196,13 +196,13 @@ Debug 模式可以与其他参数组合：
 
 ```bash
 # Debug + Verbose（最详细）
-./supertail -f /var/log/app.log --format java --debug --verbose
+./aipipe -f /var/log/app.log --format java --debug --verbose
 
 # Debug + 从管道读取
-tail -f /var/log/app.log | ./supertail --format java --debug
+tail -f /var/log/app.log | ./aipipe --format java --debug
 
 # Debug + 不同日志格式
-./supertail -f /var/log/nginx/error.log --format nginx --debug
+./aipipe -f /var/log/nginx/error.log --format nginx --debug
 ```
 
 ## 注意事项
@@ -227,19 +227,19 @@ tail -f /var/log/app.log | ./supertail --format java --debug
 ### 1. 重定向 Debug 输出到文件
 
 ```bash
-./supertail -f /var/log/app.log --format java --debug > debug.log 2>&1
+./aipipe -f /var/log/app.log --format java --debug > debug.log 2>&1
 ```
 
 ### 2. 只查看 HTTP 调用部分
 
 ```bash
-./supertail -f /var/log/app.log --format java --debug | grep -A 20 "DEBUG:"
+./aipipe -f /var/log/app.log --format java --debug | grep -A 20 "DEBUG:"
 ```
 
 ### 3. 测试单条日志
 
 ```bash
-echo "2025-10-13 10:00:00 ERROR Test" | ./supertail --format java --debug
+echo "2025-10-13 10:00:00 ERROR Test" | ./aipipe --format java --debug
 ```
 
 ---

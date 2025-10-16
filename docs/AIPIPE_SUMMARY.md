@@ -1,27 +1,27 @@
-# SuperTail 项目总结
+# AIPipe 项目总结
 
 ## 项目概述
 
-SuperTail 是一个智能日志监控工具，使用 Poe API 的 AI 能力自动分析日志内容，过滤不重要的日志，并对重要事件发送 macOS 系统通知。
+AIPipe 是一个智能日志监控工具，使用 Poe API 的 AI 能力自动分析日志内容，过滤不重要的日志，并对重要事件发送 macOS 系统通知。
 
 ## 创建的文件
 
 ### 核心文件
-- `supertail.go` - 主程序源代码（Go 语言）
-- `supertail` - 编译后的可执行文件
+- `aipipe.go` - 主程序源代码（Go 语言）
+- `aipipe` - 编译后的可执行文件
 
 ### 文档文件
-- `README_supertail.md` - 完整使用文档
-- `supertail-quickstart.md` - 快速入门指南
-- `SUPERTAIL_SUMMARY.md` - 项目总结（本文件）
+- `README_aipipe.md` - 完整使用文档
+- `aipipe-quickstart.md` - 快速入门指南
+- `AIPIPE_SUMMARY.md` - 项目总结（本文件）
 - `DEBUG_MODE_EXAMPLE.md` - Debug 模式详细说明
 - `PROMPT_EXAMPLES.md` - 提示词示例说明
 - `JSON_PARSE_FIX.md` - JSON 解析兼容性说明
 - `SYSTEM_PROMPT_IMPROVEMENT.md` - System Prompt 改进说明
 
 ### 测试和示例
-- `supertail-example.sh` - 交互式使用示例脚本
-- `test-supertail-file.sh` - 文件监控功能测试脚本
+- `aipipe-example.sh` - 交互式使用示例脚本
+- `test-aipipe-file.sh` - 文件监控功能测试脚本
 - `test-debug-mode.sh` - Debug 模式演示脚本
 - `test-notification-sound.sh` - 通知和声音测试脚本
 - `test-notification-quick.sh` - 快速通知设置向导 ⭐
@@ -57,7 +57,7 @@ SuperTail 是一个智能日志监控工具，使用 Poe API 的 AI 能力自动
 ### 2. 双模式支持 📥
 **模式 A：直接文件监控（推荐）**
 ```bash
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 ```
 - ✅ 支持断点续传（记住读取位置）
 - ✅ 自动处理日志轮转
@@ -66,7 +66,7 @@ SuperTail 是一个智能日志监控工具，使用 Poe API 的 AI 能力自动
 
 **模式 B：标准输入管道**
 ```bash
-tail -f /var/log/app.log | ./supertail --format java
+tail -f /var/log/app.log | ./aipipe --format java
 ```
 - ✅ 兼容传统 Unix 管道
 - ❌ 不支持断点续传
@@ -74,7 +74,7 @@ tail -f /var/log/app.log | ./supertail --format java
 ### 3. 断点续传 💾
 - 自动保存读取位置（offset）
 - 记录文件 inode（检测轮转）
-- 状态文件：`.supertail_文件名.state`
+- 状态文件：`.aipipe_文件名.state`
 - 重启后自动继续上次位置
 
 ### 4. 日志轮转处理 🔄
@@ -328,7 +328,7 @@ const (
 
 ### 1. 生产环境监控
 ```bash
-./supertail -f /var/log/tomcat/catalina.out --format java
+./aipipe -f /var/log/tomcat/catalina.out --format java
 ```
 - 24/7 运行
 - 断点续传保证不漏日志
@@ -336,21 +336,21 @@ const (
 
 ### 2. 开发调试
 ```bash
-npm run dev 2>&1 | ./supertail --format fastapi --verbose
+npm run dev 2>&1 | ./aipipe --format fastapi --verbose
 ```
 - 查看详细过滤原因
 - 快速定位问题
 
 ### 3. 日志分析
 ```bash
-cat old.log | ./supertail --format java
+cat old.log | ./aipipe --format java
 ```
 - 快速筛选历史日志
 - 识别重要事件
 
 ### 4. 带轮转的日志
 ```bash
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 ```
 - 自动处理 logrotate
 - 无缝切换到新文件
@@ -360,29 +360,29 @@ cat old.log | ./supertail --format java
 ### 编译
 ```bash
 cd /Users/rocky/bin
-go build -o supertail supertail.go
+go build -o aipipe aipipe.go
 ```
 
 ### 运行示例
 ```bash
 # 交互式示例
-./supertail-example.sh
+./aipipe-example.sh
 
 # 文件监控测试
-./test-supertail-file.sh
+./test-aipipe-file.sh
 
 # 实际使用
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 ```
 
 ### 查看帮助
 ```bash
-./supertail --help
+./aipipe --help
 ```
 
 ## 状态文件示例
 
-监控 `/var/log/app.log` 时会创建 `/var/log/.supertail_app.log.state`：
+监控 `/var/log/app.log` 时会创建 `/var/log/.aipipe_app.log.state`：
 
 ```json
 {
@@ -448,13 +448,13 @@ import (
 
 ```
 /Users/rocky/bin/
-├── supertail                     # 可执行文件
-├── supertail.go                  # 源代码（600+ 行）
+├── aipipe                     # 可执行文件
+├── aipipe.go                  # 源代码（600+ 行）
 │
 ├── 📖 文档
-│   ├── README_supertail.md              # 完整使用文档
-│   ├── supertail-quickstart.md          # 快速入门指南
-│   ├── SUPERTAIL_SUMMARY.md             # 项目总结
+│   ├── README_aipipe.md              # 完整使用文档
+│   ├── aipipe-quickstart.md          # 快速入门指南
+│   ├── AIPIPE_SUMMARY.md             # 项目总结
 │   ├── DEBUG_MODE_EXAMPLE.md            # Debug 模式说明
 │   ├── PROMPT_EXAMPLES.md               # 提示词示例说明
 │   ├── JSON_PARSE_FIX.md                # JSON 解析兼容性说明
@@ -462,8 +462,8 @@ import (
 │   └── NOTIFICATION_SOUND_GUIDE.md      # 通知声音播放指南 ⭐
 │
 ├── 🧪 测试脚本
-│   ├── supertail-example.sh         # 交互式示例
-│   ├── test-supertail-file.sh       # 文件监控测试
+│   ├── aipipe-example.sh         # 交互式示例
+│   ├── test-aipipe-file.sh       # 文件监控测试
 │   ├── test-debug-mode.sh           # Debug 模式演示
 │   ├── test-notification-sound.sh   # 通知声音测试 ⭐
 │   └── test-prompt-examples.sh      # 提示词效果测试

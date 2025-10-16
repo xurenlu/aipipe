@@ -2,7 +2,7 @@
 
 ## 问题：为什么看不到通知？
 
-如果运行 `echo '2025-10-13 ERROR Test' | ./supertail --format java --verbose` 没有看到通知，最常见的原因是**通知权限未授予**。
+如果运行 `echo '2025-10-13 ERROR Test' | ./aipipe --format java --verbose` 没有看到通知，最常见的原因是**通知权限未授予**。
 
 ## 🎯 快速设置（3 步）
 
@@ -86,15 +86,15 @@ osascript -e 'display notification "这是一个测试通知" with title "测试
 - ✅ 应该在屏幕右上角看到通知横幅
 - ✅ 如果没看到，说明权限未正确设置
 
-### 测试 2: 测试 SuperTail（带 verbose）
+### 测试 2: 测试 AIPipe（带 verbose）
 
 ```bash
-echo '2025-10-13 ERROR Database connection failed' | ./supertail --format java --verbose
+echo '2025-10-13 ERROR Database connection failed' | ./aipipe --format java --verbose
 ```
 
 **预期输出：**
 ```
-🚀 SuperTail 启动 - 监控 java 格式日志
+🚀 AIPipe 启动 - 监控 java 格式日志
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📥 从标准输入读取日志...
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -203,10 +203,10 @@ osascript -e 'display notification "测试" with title "测试"'
 **解决方法：**
 ```bash
 # 使用明确的 ERROR 日志测试
-echo '2025-10-13 10:00:00 ERROR Database connection failed' | ./supertail --format java --verbose
+echo '2025-10-13 10:00:00 ERROR Database connection failed' | ./aipipe --format java --verbose
 
 # 使用 debug 模式查看完整过程
-echo '2025-10-13 10:00:00 ERROR Database connection failed' | ./supertail --format java --debug
+echo '2025-10-13 10:00:00 ERROR Database connection failed' | ./aipipe --format java --debug
 ```
 
 ## 📋 完整检查清单
@@ -225,9 +225,9 @@ echo '2025-10-13 10:00:00 ERROR Database connection failed' | ./supertail --form
   ```bash
   afplay /System/Library/Sounds/Glass.aiff
   ```
-- [ ] 使用 ERROR 日志测试 SuperTail：
+- [ ] 使用 ERROR 日志测试 AIPipe：
   ```bash
-  echo '2025-10-13 ERROR Test' | ./supertail --format java --verbose
+  echo '2025-10-13 ERROR Test' | ./aipipe --format java --verbose
   ```
 
 ## 🎬 快速设置脚本
@@ -245,8 +245,8 @@ osascript -e 'display notification "如果你看到这个，说明设置成功�
 # 测试声音
 afplay /System/Library/Sounds/Glass.aiff
 
-# 测试 SuperTail
-echo '2025-10-13 ERROR Database failed' | ./supertail --format java --verbose
+# 测试 AIPipe
+echo '2025-10-13 ERROR Database failed' | ./aipipe --format java --verbose
 ```
 
 ## 📱 不同终端应用的权限
@@ -306,7 +306,7 @@ tccutil reset Notifications com.apple.Terminal
 
 3. 测试命令的输出：
    ```bash
-   echo '2025-10-13 ERROR Test' | ./supertail --format java --verbose
+   echo '2025-10-13 ERROR Test' | ./aipipe --format java --verbose
    ```
 
 4. 手动通知测试结果：

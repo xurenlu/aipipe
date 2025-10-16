@@ -1,8 +1,8 @@
-# SuperTail 提示词示例说明
+# AIPipe 提示词示例说明
 
 ## 概述
 
-SuperTail 使用了详细的提示词（Prompt）来指导 AI 判断日志的重要性。提示词中包含了大量实际场景的示例，帮助 AI 更准确地分类日志。
+AIPipe 使用了详细的提示词（Prompt）来指导 AI 判断日志的重要性。提示词中包含了大量实际场景的示例，帮助 AI 更准确地分类日志。
 
 ## 提示词结构
 
@@ -291,12 +291,12 @@ HTTP API 正常响应：
 
 运行测试：
 ```bash
-cat test-logs-comprehensive.txt | ./supertail --format java
+cat test-logs-comprehensive.txt | ./aipipe --format java
 ```
 
 使用 debug 模式查看 AI 判断依据：
 ```bash
-cat test-logs-comprehensive.txt | ./supertail --format java --debug
+cat test-logs-comprehensive.txt | ./aipipe --format java --debug
 ```
 
 ## 提示词优势

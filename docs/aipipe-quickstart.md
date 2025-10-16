@@ -1,4 +1,4 @@
-# SuperTail 快速入门
+# AIPipe 快速入门
 
 ## 5 分钟快速开始
 
@@ -6,10 +6,10 @@
 
 ```bash
 # 直接监控日志文件（推荐）
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 
 # 通过管道监控
-tail -f /var/log/app.log | ./supertail --format java
+tail -f /var/log/app.log | ./aipipe --format java
 ```
 
 ### 2. 支持的日志格式
@@ -25,10 +25,10 @@ tail -f /var/log/app.log | ./supertail --format java
 
 ```bash
 # 运行交互式示例
-./supertail-example.sh
+./aipipe-example.sh
 
 # 测试文件监控功能
-./test-supertail-file.sh
+./test-aipipe-file.sh
 
 # 测试增强提示词效果（30 条全面测试日志）
 ./test-prompt-examples.sh
@@ -47,7 +47,7 @@ tail -f /var/log/app.log | ./supertail --format java
 使用 `-f` 参数时会自动：
 - 记住上次读取位置
 - 重启后继续监控
-- 状态文件：`.supertail_文件名.state`
+- 状态文件：`.aipipe_文件名.state`
 
 ### 🔄 日志轮转
 
@@ -69,43 +69,43 @@ tail -f /var/log/app.log | ./supertail --format java
 
 ```bash
 # 本地监控
-./supertail -f /var/log/tomcat/catalina.out --format java
+./aipipe -f /var/log/tomcat/catalina.out --format java
 
 # 远程监控（SSH）
-ssh server "tail -f /var/log/app.log" | ./supertail --format java
+ssh server "tail -f /var/log/app.log" | ./aipipe --format java
 ```
 
 ### 开发调试
 
 ```bash
 # 详细模式（显示过滤原因）
-./supertail -f logs/development.log --format ruby --verbose
+./aipipe -f logs/development.log --format ruby --verbose
 
 # 监控应用输出
-npm run dev 2>&1 | ./supertail --format fastapi
+npm run dev 2>&1 | ./aipipe --format fastapi
 ```
 
 ### 分析历史日志
 
 ```bash
 # 分析整个日志文件
-cat app.log | ./supertail --format java
+cat app.log | ./aipipe --format java
 
 # 过滤特定内容后分析
-grep "2025-10-13" app.log | ./supertail --format java
+grep "2025-10-13" app.log | ./aipipe --format java
 ```
 
 ### 带日志轮转的文件
 
 ```bash
 # 自动处理 logrotate 配置的文件
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 ```
 
 ## 输出说明
 
 ```
-🚀 SuperTail 启动 - 监控 java 格式日志
+🚀 AIPipe 启动 - 监控 java 格式日志
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📁 监控文件: /var/log/app.log
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -134,22 +134,22 @@ grep "2025-10-13" app.log | ./supertail --format java
 A: 按 `Ctrl+C` 停止
 
 ### Q: 状态文件存放在哪里？
-A: 与被监控的日志文件在同一目录，文件名为 `.supertail_原文件名.state`
+A: 与被监控的日志文件在同一目录，文件名为 `.aipipe_原文件名.state`
 
 ### Q: 如何重新从头开始读取？
-A: 删除状态文件后重启 supertail
+A: 删除状态文件后重启 aipipe
 
 ```bash
-rm .supertail_app.log.state
-./supertail -f /var/log/app.log --format java
+rm .aipipe_app.log.state
+./aipipe -f /var/log/app.log --format java
 ```
 
 ### Q: 能同时监控多个文件吗？
-A: 每个 supertail 实例监控一个文件，需要多个文件时启动多个实例
+A: 每个 aipipe 实例监控一个文件，需要多个文件时启动多个实例
 
 ```bash
-./supertail -f /var/log/app1.log --format java &
-./supertail -f /var/log/app2.log --format php &
+./aipipe -f /var/log/app1.log --format java &
+./aipipe -f /var/log/app2.log --format php &
 ```
 
 ### Q: API 调用失败怎么办？
@@ -162,7 +162,7 @@ A: 当前版本由 AI 自动判断，后续版本会支持自定义规则
 A: 使用 `--debug` 参数查看完整的 HTTP 请求和响应
 
 ```bash
-./supertail -f /var/log/app.log --format java --debug
+./aipipe -f /var/log/app.log --format java --debug
 ```
 
 这会显示：
@@ -178,7 +178,7 @@ A: 使用 `--debug` 参数查看完整的 HTTP 请求和响应
 
 ## 更多信息
 
-详细文档：`README_supertail.md`
+详细文档：`README_aipipe.md`
 
 ---
 

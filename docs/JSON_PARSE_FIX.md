@@ -165,7 +165,7 @@ if jsonStr[len(jsonStr)-1] != '}' && jsonStr[len(jsonStr)-1] != ']' {
 ### 使用 --debug 模式查看解析过程
 
 ```bash
-echo "2025-10-13 INFO Test log" | ./supertail --format java --debug
+echo "2025-10-13 INFO Test log" | ./aipipe --format java --debug
 ```
 
 在 debug 输出中可以看到：
@@ -233,7 +233,7 @@ func main() {
 
 ## 相关文件
 
-- `supertail.go` - 包含 `parseAnalysisResponse()` 函数
+- `aipipe.go` - 包含 `parseAnalysisResponse()` 函数
 - `DEBUG_MODE_EXAMPLE.md` - 使用 debug 模式查看解析过程
 
 ## 版本历史

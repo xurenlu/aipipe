@@ -1,6 +1,6 @@
-# SuperTail - 智能日志监控工具
+# AIPipe - 智能日志监控工具
 
-SuperTail 是一个智能日志过滤和监控工具，使用 AI 自动分析日志内容，过滤不重要的日志，并对重要事件发送 macOS 通知。
+AIPipe 是一个智能日志过滤和监控工具，使用 AI 自动分析日志内容，过滤不重要的日志，并对重要事件发送 macOS 通知。
 
 ## 功能特性
 
@@ -20,7 +20,7 @@ SuperTail 是一个智能日志过滤和监控工具，使用 AI 自动分析日
 
 ```bash
 cd /Users/rocky/bin
-go build -o supertail supertail.go
+go build -o aipipe aipipe.go
 ```
 
 ## 使用方法
@@ -31,29 +31,29 @@ go build -o supertail supertail.go
 
 ```bash
 # 监控 Java 日志文件（会记住读取位置）
-./supertail -f /var/log/application.log --format java
+./aipipe -f /var/log/application.log --format java
 
 # 监控 PHP 日志
-./supertail -f /var/log/php-fpm.log --format php
+./aipipe -f /var/log/php-fpm.log --format php
 
 # 监控 Nginx 日志
-./supertail -f /var/log/nginx/error.log --format nginx
+./aipipe -f /var/log/nginx/error.log --format nginx
 
 # 详细模式监控
-./supertail -f /var/log/app.log --format java --verbose
+./aipipe -f /var/log/app.log --format java --verbose
 ```
 
 #### 方式二：从标准输入读取
 
 ```bash
 # 通过管道监控
-tail -f application.log | ./supertail --format java
+tail -f application.log | ./aipipe --format java
 
 # 分析历史日志
-cat old.log | ./supertail --format php
+cat old.log | ./aipipe --format php
 
 # 监控多个日志文件
-tail -f /var/log/*.log | ./supertail --format java
+tail -f /var/log/*.log | ./aipipe --format java
 ```
 
 ### 参数说明
@@ -97,31 +97,31 @@ tail -f /var/log/*.log | ./supertail --format java
 
 ```bash
 # 监控生产环境 Java 应用（断点续传）
-./supertail -f /var/log/tomcat/catalina.out --format java
+./aipipe -f /var/log/tomcat/catalina.out --format java
 
 # 监控带日志轮转的文件
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 
 # 详细模式，显示过滤原因
-./supertail -f /var/log/app.log --format java --verbose
+./aipipe -f /var/log/app.log --format java --verbose
 
 # 调试模式，显示 HTTP 请求响应详情
-./supertail -f /var/log/app.log --format java --debug
+./aipipe -f /var/log/app.log --format java --debug
 
 # 组合使用 verbose 和 debug
-./supertail -f /var/log/app.log --format java --verbose --debug
+./aipipe -f /var/log/app.log --format java --verbose --debug
 
 # 批处理模式（默认，推荐）
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 
 # 自定义批处理参数（大批次，适合高频日志）
-./supertail -f /var/log/app.log --format java --batch-size 20 --batch-wait 2s
+./aipipe -f /var/log/app.log --format java --batch-size 20 --batch-wait 2s
 
 # 禁用批处理（逐行分析，实时性更好）
-./supertail -f /var/log/app.log --format java --no-batch
+./aipipe -f /var/log/app.log --format java --no-batch
 
 # 从标准输入读取
-tail -f /var/log/app.log | ./supertail --format java
+tail -f /var/log/app.log | ./aipipe --format java
 ```
 
 ## 输出说明
@@ -141,7 +141,7 @@ tail -f /var/log/app.log | ./supertail --format java
 
 ## 判断标准
 
-SuperTail 使用了包含 60+ 个真实场景示例的增强提示词，帮助 AI 更准确地判断日志重要性。
+AIPipe 使用了包含 60+ 个真实场景示例的增强提示词，帮助 AI 更准确地判断日志重要性。
 
 ### 保守过滤策略 ⭐
 
@@ -169,10 +169,10 @@ SuperTail 使用了包含 60+ 个真实场景示例的增强提示词，帮助 A
 **示例：**
 ```bash
 # DEBUG 日志 → 本地过滤（不调用 AI）
-echo '2025-10-13 DEBUG User action' | ./supertail --format java
+echo '2025-10-13 DEBUG User action' | ./aipipe --format java
 
 # ERROR 日志 → 调用 AI 分析
-echo '2025-10-13 ERROR Database failed' | ./supertail --format java
+echo '2025-10-13 ERROR Database failed' | ./aipipe --format java
 ```
 
 详细说明：`本地预过滤优化.md`
@@ -249,7 +249,7 @@ echo '2025-10-13 ERROR Database failed' | ./supertail --format java
 
 ### System Prompt 设计
 
-SuperTail 使用了符合 OpenAI 最佳实践的 **system + user** 消息结构：
+AIPipe 使用了符合 OpenAI 最佳实践的 **system + user** 消息结构：
 
 **请求格式：**
 ```json
@@ -276,7 +276,7 @@ SuperTail 使用了符合 OpenAI 最佳实践的 **system + user** 消息结构�
 
 详细说明：`SYSTEM_PROMPT_IMPROVEMENT.md`
 
-如需修改 API 配置，请编辑 `supertail.go` 中的常量。
+如需修改 API 配置，请编辑 `aipipe.go` 中的常量。
 
 ## 技术实现
 
@@ -289,11 +289,11 @@ SuperTail 使用了符合 OpenAI 最佳实践的 **system + user** 消息结构�
 
 ### 状态文件
 
-当使用 `-f` 参数监控文件时，supertail 会在日志文件所在目录创建状态文件：
+当使用 `-f` 参数监控文件时，aipipe 会在日志文件所在目录创建状态文件：
 
 ```bash
 # 监控 /var/log/app.log 时会创建
-/var/log/.supertail_app.log.state
+/var/log/.aipipe_app.log.state
 ```
 
 状态文件包含：
@@ -330,26 +330,26 @@ SuperTail 使用了符合 OpenAI 最佳实践的 **system + user** 消息结构�
 ### 监控生产环境（推荐）
 ```bash
 # 直接监控，支持断点续传
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 
 # 或通过 SSH（不支持断点续传）
-ssh production "tail -f /var/log/app.log" | ./supertail --format java
+ssh production "tail -f /var/log/app.log" | ./aipipe --format java
 ```
 
 ### 调试开发环境
 ```bash
-npm run dev 2>&1 | ./supertail --format fastapi --verbose
+npm run dev 2>&1 | ./aipipe --format fastapi --verbose
 ```
 
 ### 分析错误日志
 ```bash
-grep ERROR app.log | ./supertail --format java
+grep ERROR app.log | ./aipipe --format java
 ```
 
 ### 监控带轮转的日志
 ```bash
 # logrotate 配置的日志文件
-./supertail -f /var/log/app.log --format java
+./aipipe -f /var/log/app.log --format java
 # 自动处理 app.log.1、app.log.2 等轮转文件
 ```
 
@@ -360,7 +360,7 @@ grep ERROR app.log | ./supertail --format java
 添加 `--debug` 参数开启调试模式：
 
 ```bash
-./supertail -f /var/log/app.log --format java --debug
+./aipipe -f /var/log/app.log --format java --debug
 ```
 
 ### 输出内容
@@ -470,7 +470,7 @@ Response Body:
 
 ## JSON 解析兼容性
 
-SuperTail 能自动处理多种 AI 响应格式，无需担心格式问题。
+AIPipe 能自动处理多种 AI 响应格式，无需担心格式问题。
 
 ### 支持的格式
 

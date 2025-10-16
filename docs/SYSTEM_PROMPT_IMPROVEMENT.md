@@ -197,7 +197,7 @@ User：具体任务是什么？
 使用 `--debug` 可以看到完整的请求结构：
 
 ```bash
-echo "2025-10-13 ERROR Test" | ./supertail --format java --debug
+echo "2025-10-13 ERROR Test" | ./aipipe --format java --debug
 ```
 
 输出会显示：
@@ -290,7 +290,7 @@ echo "2025-10-13 ERROR Test" | ./supertail --format java --debug
 
 ## 相关文件
 
-- `supertail.go` - 实现代码
+- `aipipe.go` - 实现代码
   - `buildSystemPrompt()` - 构建系统提示词
   - `buildUserPrompt()` - 构建用户提示词
   - `callPoeAPI()` - 支持两条消息的 API 调用
@@ -302,13 +302,13 @@ echo "2025-10-13 ERROR Test" | ./supertail --format java --debug
 
 ```bash
 # 基本测试
-echo "2025-10-13 INFO Health check" | ./supertail --format java
+echo "2025-10-13 INFO Health check" | ./aipipe --format java
 
 # Debug 模式查看消息结构
-echo "2025-10-13 ERROR Database failed" | ./supertail --format java --debug
+echo "2025-10-13 ERROR Database failed" | ./aipipe --format java --debug
 
 # 全面测试
-cat test-logs-comprehensive.txt | ./supertail --format java
+cat test-logs-comprehensive.txt | ./aipipe --format java
 ```
 
 ## 版本历史

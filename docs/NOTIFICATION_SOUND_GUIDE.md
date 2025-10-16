@@ -2,7 +2,7 @@
 
 ## 声音播放机制
 
-SuperTail 使用了多层次的声音播放策略，确保重要日志告警时一定有声音提醒。
+AIPipe 使用了多层次的声音播放策略，确保重要日志告警时一定有声音提醒。
 
 ### 播放策略
 
@@ -160,7 +160,7 @@ afplay /System/Library/Sounds/Glass.aiff
 - osascript 通知声音
 - afplay 音频播放
 - beep 蜂鸣声
-- SuperTail 实际告警
+- AIPipe 实际告警
 
 ### 方法 2：手动测试通知
 
@@ -198,14 +198,14 @@ osascript -e "beep 1"
 osascript -e "beep 3"
 ```
 
-### 方法 5：使用 SuperTail 测试
+### 方法 5：使用 AIPipe 测试
 
 ```bash
 # 触发一个告警（ERROR 日志）
-echo "2025-10-13 10:00:00 ERROR Database connection failed" | ./supertail --format java
+echo "2025-10-13 10:00:00 ERROR Database connection failed" | ./aipipe --format java
 
 # 详细模式查看错误
-echo "2025-10-13 10:00:00 ERROR Test" | ./supertail --format java --verbose
+echo "2025-10-13 10:00:00 ERROR Test" | ./aipipe --format java --verbose
 ```
 
 ## 可用的系统声音
@@ -270,14 +270,14 @@ osascript -l JavaScript -e 'displayNotification("test", {withTitle: "Test", soun
 afplay /System/Library/Sounds/Glass.aiff && echo "✅ 成功" || echo "❌ 失败"
 ```
 
-### 4. 查看 SuperTail 的详细输出
+### 4. 查看 AIPipe 的详细输出
 
 ```bash
 # 使用 verbose 模式
-echo "2025-10-13 ERROR Test" | ./supertail --format java --verbose
+echo "2025-10-13 ERROR Test" | ./aipipe --format java --verbose
 
 # 使用 debug 模式（查看 API 调用）
-echo "2025-10-13 ERROR Test" | ./supertail --format java --debug
+echo "2025-10-13 ERROR Test" | ./aipipe --format java --debug
 ```
 
 ## 常见问题解答
@@ -293,7 +293,7 @@ A: 最可能的原因：
 
 ### Q: 可以自定义声音吗？
 
-A: 可以！修改 `supertail.go` 中的声音列表：
+A: 可以！修改 `aipipe.go` 中的声音列表：
 
 ```go
 soundNames := []string{"Glass", "Ping", "Pop", "Purr", "Bottle"}
@@ -303,7 +303,7 @@ soundNames := []string{"Hero", "Funk", "Sosumi"}
 
 然后重新编译：
 ```bash
-go build -o supertail supertail.go
+go build -o aipipe aipipe.go
 ```
 
 ### Q: 声音太大/太小怎么办？
@@ -349,16 +349,16 @@ A: 不会。这些命令需要在本地 macOS 系统上运行。SSH 远程会话
 ./test-notification-sound.sh
 
 # 快速测试
-echo "2025-10-13 ERROR Database failed" | ./supertail --format java
+echo "2025-10-13 ERROR Database failed" | ./aipipe --format java
 ```
 
 ## 相关文件
 
-- `supertail.go` - 实现代码
+- `aipipe.go` - 实现代码
   - `sendNotification()` - 发送通知函数
   - `playSystemSound()` - 播放声音函数
 - `test-notification-sound.sh` - 完整测试脚本
-- `README_supertail.md` - 使用文档
+- `README_aipipe.md` - 使用文档
 
 ---
 
