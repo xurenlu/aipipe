@@ -1,0 +1,303 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.2.0)'
+        required: true
+        default: 'v1.2.0'
+
+env:
+  GO_VERSION: '1.21'
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          # macOS
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+            suffix: ''
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            suffix: ''
+          # Linux
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            suffix: ''
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            suffix: ''
+          # Windows
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            suffix: '.exe'
+          - os: windows-latest
+            goos: windows
+            goarch: arm64
+            suffix: '.exe'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Get dependencies
+        run: go mod download
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o aipipe${{ matrix.suffix }} aipipe.go
+
+      - name: Test binary
+        run: |
+          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+            ./aipipe${{ matrix.suffix }} --help
+          else
+            ./aipipe${{ matrix.suffix }} --help
+          fi
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aipipe-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: aipipe${{ matrix.suffix }}
+          retention-days: 30
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set release tag
+        id: set_tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Create release archive for macOS amd64
+        run: |
+          cd artifacts/aipipe-darwin-amd64
+          cp ../../README.md .
+          cp ../../docs/README_aipipe.md .
+          cp ../../docs/aipipe-quickstart.md .
+          tar -czf ../../aipipe-${{ steps.set_tag.outputs.tag }}-darwin-amd64.tar.gz aipipe README.md README_aipipe.md aipipe-quickstart.md
+          cd ../..
+
+      - name: Create release archive for macOS arm64
+        run: |
+          cd artifacts/aipipe-darwin-arm64
+          cp ../../README.md .
+          cp ../../docs/README_aipipe.md .
+          cp ../../docs/aipipe-quickstart.md .
+          tar -czf ../../aipipe-${{ steps.set_tag.outputs.tag }}-darwin-arm64.tar.gz aipipe README.md README_aipipe.md aipipe-quickstart.md
+          cd ../..
+
+      - name: Create release archive for Linux amd64
+        run: |
+          cd artifacts/aipipe-linux-amd64
+          cp ../../README.md .
+          cp ../../docs/README_aipipe.md .
+          cp ../../docs/aipipe-quickstart.md .
+          tar -czf ../../aipipe-${{ steps.set_tag.outputs.tag }}-linux-amd64.tar.gz aipipe README.md README_aipipe.md aipipe-quickstart.md
+          cd ../..
+
+      - name: Create release archive for Linux arm64
+        run: |
+          cd artifacts/aipipe-linux-arm64
+          cp ../../README.md .
+          cp ../../docs/README_aipipe.md .
+          cp ../../docs/aipipe-quickstart.md .
+          tar -czf ../../aipipe-${{ steps.set_tag.outputs.tag }}-linux-arm64.tar.gz aipipe README.md README_aipipe.md aipipe-quickstart.md
+          cd ../..
+
+      - name: Create release archive for Windows amd64
+        run: |
+          cd artifacts/aipipe-windows-amd64
+          cp ../../README.md .
+          cp ../../docs/README_aipipe.md .
+          cp ../../docs/aipipe-quickstart.md .
+          zip -r ../../aipipe-${{ steps.set_tag.outputs.tag }}-windows-amd64.zip aipipe.exe README.md README_aipipe.md aipipe-quickstart.md
+          cd ../..
+
+      - name: Create release archive for Windows arm64
+        run: |
+          cd artifacts/aipipe-windows-arm64
+          cp ../../README.md .
+          cp ../../docs/README_aipipe.md .
+          cp ../../docs/aipipe-quickstart.md .
+          zip -r ../../aipipe-${{ steps.set_tag.outputs.tag }}-windows-arm64.zip aipipe.exe README.md README_aipipe.md aipipe-quickstart.md
+          cd ../..
+
+      - name: Generate checksums
+        run: |
+          sha256sum aipipe-*.tar.gz aipipe-*.zip > checksums.txt
+
+      - name: Create Release Notes
+        id: release_notes
+        run: |
+          cat > release_notes.md << EOF
+          # AIPipe ${{ steps.set_tag.outputs.tag }}
+          
+          ## 🚀 智能日志监控工具
+          
+          AIPipe 是一个智能日志过滤和监控工具，使用 AI 自动分析日志内容，过滤不重要的日志，并对重要事件发送系统通知。
+          
+          ## ✨ 主要特性
+          
+          - 🤖 **AI 智能分析**: 使用 AI 自动判断日志重要性
+          - 🌍 **24 种日志格式支持**: 覆盖主流编程语言、数据库、云原生工具
+          - 🔔 **实时通知**: 重要日志发送系统通知（支持 macOS、Linux、Windows）
+          - 📦 **批处理模式**: 智能累积多行日志批量分析，节省 API 调用
+          - ⚡ **本地预过滤**: DEBUG/INFO 级别日志本地处理，大幅提升性能
+          - 🛡️ **保守策略**: AI 无法确定时默认过滤，避免误报
+          
+          ## 🎯 支持的日志格式
+          
+          ### 后端编程语言
+          - Java, Go, Rust, C#, PHP, Python, Ruby, Kotlin, FastAPI
+          
+          ### 前端和全栈
+          - Node.js, TypeScript
+          
+          ### Web 服务器
+          - Nginx
+          
+          ### 云原生和容器
+          - Docker, Kubernetes
+          
+          ### 数据库
+          - PostgreSQL, MySQL, Redis, Elasticsearch
+          
+          ### 开发工具
+          - Git, Jenkins, GitHub Actions
+          
+          ### 系统级日志
+          - Linux journald, macOS Console, Syslog
+          
+          ## 📦 安装说明
+          
+          1. 下载适合您系统的压缩包
+          2. 解压缩到任意目录
+          3. 将可执行文件添加到 PATH 环境变量
+          4. 创建配置文件 \`~/.config/aipipe.json\` (可选)
+          
+          ## 🚀 快速开始
+          
+          \`\`\`bash
+          # 监控 Java 应用日志
+          ./aipipe -f /var/log/app.log --format java
+          
+          # 监控 Docker 容器
+          docker logs -f container_name | ./aipipe --format docker
+          
+          # 监控系统日志 (Linux)
+          journalctl -f | ./aipipe --format journald
+          
+          # 监控系统日志 (macOS)
+          log stream | ./aipipe --format macos-console
+          \`\`\`
+          
+          ## 📚 文档
+          
+          - [完整使用指南](README_aipipe.md)
+          - [快速入门](aipipe-quickstart.md)
+          - [支持的格式列表](https://github.com/xurenlu/aipipe/blob/main/docs/SUPPORTED_FORMATS.md)
+          - [完整示例](https://github.com/xurenlu/aipipe/blob/main/docs/COMPREHENSIVE_EXAMPLES.md)
+          
+          ## 🔧 配置
+          
+          创建 \`~/.config/aipipe.json\` 文件：
+          
+          \`\`\`json
+          {
+            "ai_endpoint": "https://your-ai-server.com/api/v1/chat/completions",
+            "token": "your-api-token",
+            "model": "gpt-4",
+            "custom_prompt": ""
+          }
+          \`\`\`
+          
+          ## 📊 文件信息
+          
+          - **macOS (Intel)**: aipipe-${{ steps.set_tag.outputs.tag }}-darwin-amd64.tar.gz
+          - **macOS (Apple Silicon)**: aipipe-${{ steps.set_tag.outputs.tag }}-darwin-arm64.tar.gz
+          - **Linux (x86_64)**: aipipe-${{ steps.set_tag.outputs.tag }}-linux-amd64.tar.gz
+          - **Linux (ARM64)**: aipipe-${{ steps.set_tag.outputs.tag }}-linux-arm64.tar.gz
+          - **Windows (x86_64)**: aipipe-${{ steps.set_tag.outputs.tag }}-windows-amd64.zip
+          - **Windows (ARM64)**: aipipe-${{ steps.set_tag.outputs.tag }}-windows-arm64.zip
+          
+          ## 🔍 验证下载
+          
+          使用 checksums.txt 文件验证下载完整性：
+          
+          \`\`\`bash
+          sha256sum -c checksums.txt
+          \`\`\`
+          
+          ## 🆘 支持
+          
+          - [GitHub Issues](https://github.com/xurenlu/aipipe/issues)
+          - [GitHub Discussions](https://github.com/xurenlu/aipipe/discussions)
+          
+          ---
+          
+          **作者**: rocky  
+          **版本**: ${{ steps.set_tag.outputs.tag }}  
+          **发布日期**: $(date -u +"%Y-%m-%d")
+          EOF
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.set_tag.outputs.tag }}
+          name: AIPipe ${{ steps.set_tag.outputs.tag }}
+          body_path: release_notes.md
+          files: |
+            aipipe-${{ steps.set_tag.outputs.tag }}-darwin-amd64.tar.gz
+            aipipe-${{ steps.set_tag.outputs.tag }}-darwin-arm64.tar.gz
+            aipipe-${{ steps.set_tag.outputs.tag }}-linux-amd64.tar.gz
+            aipipe-${{ steps.set_tag.outputs.tag }}-linux-arm64.tar.gz
+            aipipe-${{ steps.set_tag.outputs.tag }}-windows-amd64.zip
+            aipipe-${{ steps.set_tag.outputs.tag }}-windows-arm64.zip
+            checksums.txt
+          draft: false
+          prerelease: ${{ contains(steps.set_tag.outputs.tag, 'beta') || contains(steps.set_tag.outputs.tag, 'alpha') || contains(steps.set_tag.outputs.tag, 'rc') }}
+
+      - name: Cleanup
+        run: |
+          rm -rf artifacts/
+          rm -f aipipe-*.tar.gz aipipe-*.zip checksums.txt release_notes.md

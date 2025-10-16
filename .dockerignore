@@ -1,0 +1,54 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+build/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*.test
+coverage.out
+coverage.html
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Documentation build
+docs/_build/
+
+# Scripts (不需要在容器中)
+scripts/
+
+# GitHub workflows (不需要在容器中)
+.github/
+
+# Makefile (不需要在容器中)
+Makefile
+
+# Docker files (避免递归)
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# Test files
+test-*.sh
+test-*.txt
