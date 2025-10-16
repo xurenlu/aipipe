@@ -85,6 +85,9 @@ tail -f /var/log/*.log | ./aipipe --format java
   - `git` - Git 操作日志
   - `jenkins` - Jenkins CI/CD 日志
   - `github` - GitHub Actions 日志
+  - `journald` - Linux systemd journal 日志
+  - `macos-console` - macOS Console 统一日志系统
+  - `syslog` - 传统 Syslog 日志格式
 
 - `--verbose`：显示详细输出，包括过滤原因
 

@@ -47,6 +47,11 @@ tail -f /var/log/app.log | ./aipipe --format java
 - `jenkins` - Jenkins CI/CD 日志
 - `github` - GitHub Actions 日志
 
+**系统级日志：**
+- `journald` - Linux systemd journal 日志
+- `macos-console` - macOS Console 统一日志系统
+- `syslog` - 传统 Syslog 日志格式
+
 ### 3. 运行示例
 
 ```bash

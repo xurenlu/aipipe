@@ -101,7 +101,7 @@ type LogLineMerger struct {
 }
 
 var (
-	logFormat        = flag.String("format", "java", "日志格式 (java, php, nginx, ruby, fastapi, python, go, rust, csharp, kotlin, nodejs, typescript, docker, kubernetes, postgresql, mysql, redis, elasticsearch, git, jenkins, github)")
+	logFormat        = flag.String("format", "java", "日志格式 (java, php, nginx, ruby, fastapi, python, go, rust, csharp, kotlin, nodejs, typescript, docker, kubernetes, postgresql, mysql, redis, elasticsearch, git, jenkins, github, journald, macos-console, syslog)")
 	verbose          = flag.Bool("verbose", false, "显示详细输出")
 	filePath         = flag.String("f", "", "要监控的日志文件路径（类似 tail -f）")
 	debug            = flag.Bool("debug", false, "调试模式，打印 HTTP 请求和响应详情")
@@ -1141,72 +1141,90 @@ func getFormatSpecificExamples(format string) string {
    - "INFO com.example.service.UserService - User created successfully"
    - "ERROR com.example.dao.DatabaseDAO - Connection pool exhausted"
    - "WARN com.example.controller.AuthController - Invalid JWT token"`
-	
+
 	case "php":
 		return `PHP 特定示例：
    - "PHP Notice: Undefined variable $user in /app/index.php"
    - "PHP Fatal error: Call to undefined function mysql_connect()"
    - "PHP Warning: file_get_contents() failed to open stream"`
-	
+
 	case "nginx":
 		return `Nginx 特定示例：
    - "127.0.0.1 - - [13/Oct/2025:10:00:01 +0000] \"GET /api/health HTTP/1.1\" 200"
    - "upstream server temporarily disabled while connecting to upstream"
    - "connect() failed (111: Connection refused) while connecting to upstream"`
-	
+
 	case "go":
 		return `Go 特定示例：
    - "INFO: Starting server on :8080"
    - "ERROR: database connection failed: dial tcp: connection refused"
    - "WARN: goroutine leak detected"`
-	
+
 	case "rust":
 		return `Rust 特定示例：
    - "INFO: Server listening on 127.0.0.1:8080"
    - "ERROR: thread 'main' panicked at 'index out of bounds'"
    - "WARN: memory usage high: 512MB"`
-	
+
 	case "csharp":
 		return `C# 特定示例：
    - "INFO: Application started"
    - "ERROR: System.Exception: Database connection timeout"
    - "WARN: Memory pressure detected"`
-	
+
 	case "nodejs":
 		return `Node.js 特定示例：
    - "info: Server running on port 3000"
    - "error: Error: ENOENT: no such file or directory"
    - "warn: DeprecationWarning: Buffer() is deprecated"`
-	
+
 	case "docker":
 		return `Docker 特定示例：
    - "Container started successfully"
    - "ERROR: failed to start container: port already in use"
    - "WARN: container running out of memory"`
-	
+
 	case "kubernetes":
 		return `Kubernetes 特定示例：
    - "Pod started successfully"
    - "ERROR: Failed to pull image: ImagePullBackOff"
    - "WARN: Pod evicted due to memory pressure"`
-	
+
 	case "postgresql":
 		return `PostgreSQL 特定示例：
    - "LOG: database system is ready to accept connections"
    - "ERROR: relation \"users\" does not exist"
    - "WARN: checkpoint request timed out"`
-	
+
 	case "mysql":
 		return `MySQL 特定示例：
    - "InnoDB: Database was not shut down normally"
    - "ERROR 1045: Access denied for user 'root'@'localhost'"
    - "Warning: Aborted connection to db"`
-	
+
 	case "redis":
 		return `Redis 特定示例：
    - "Redis server version 6.2.6, bits=64"
    - "ERROR: OOM command not allowed when used memory > 'maxmemory'"
    - "WARN: overcommit_memory is set to 0"`
+	
+	case "journald":
+		return `Linux journald 特定示例：
+   - "Oct 17 10:00:01 systemd[1]: Started Network Manager Script Dispatcher Service"
+   - "Oct 17 10:00:02 kernel: [ 1234.567890] Out of memory: Kill process 1234 (chrome) score 500 or sacrifice child"
+   - "Oct 17 10:00:03 sshd[1234]: Failed password for root from 192.168.1.100 port 22 ssh2"`
+	
+	case "macos-console":
+		return `macOS Console 特定示例：
+   - "2025-10-17 10:00:01.123456+0800 0x7b Default 0x0 0 0 kernel: (AppleH11ANEInterface) ANE0: EnableMemoryUnwireTimer: ERROR: Cannot enable Memory Unwire Timer"
+   - "2025-10-17 10:00:02.234567+0800 0x1f11722 Error 0x185174d 386 0 locationd: (TCC) [com.apple.TCC:access] send_message_with_reply_sync(): XPC_ERROR_CONNECTION_INVALID"
+   - "2025-10-17 10:00:03.345678+0800 0x1f11e95 Error 0x1851731 558 0 searchpartyd: (TCC) [com.apple.TCC:access] send_message_with_reply_sync(): XPC_ERROR_CONNECTION_INVALID"`
+	
+	case "syslog":
+		return `Syslog 特定示例：
+   - "Oct 17 10:00:01 hostname systemd[1]: Started Network Manager Script Dispatcher Service"
+   - "Oct 17 10:00:02 hostname kernel: [ 1234.567890] Out of memory: Kill process 1234 (chrome) score 500"
+   - "Oct 17 10:00:03 hostname sshd[1234]: Failed password for root from 192.168.1.100 port 22 ssh2"`
 	
 	default:
 		return ""
@@ -1216,7 +1234,7 @@ func getFormatSpecificExamples(format string) string {
 // 构建系统提示词（定义角色和判断标准）
 func buildSystemPrompt(format string) string {
 	formatExamples := getFormatSpecificExamples(format)
-	
+
 	basePrompt := fmt.Sprintf(`你是一个专业的日志分析助手，专门分析 %s 格式的日志。
 
 你的任务是判断日志是否需要关注，并以 JSON 格式返回分析结果。

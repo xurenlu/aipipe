@@ -291,6 +291,56 @@ WARN: overcommit_memory is set to 0
 - 理解工作流和步骤错误
 - 分析部署和测试日志
 
+### 系统级日志
+
+#### 22. Linux systemd journal (`journald`)
+```bash
+journalctl -f | ./aipipe --format journald
+```
+**特点：**
+- 识别 systemd 服务状态变化
+- 理解内核消息和硬件错误
+- 分析系统启动和关闭事件
+
+**示例日志：**
+```
+Oct 17 10:00:01 systemd[1]: Started Network Manager Script Dispatcher Service
+Oct 17 10:00:02 kernel: [ 1234.567890] Out of memory: Kill process 1234 (chrome) score 500 or sacrifice child
+Oct 17 10:00:03 sshd[1234]: Failed password for root from 192.168.1.100 port 22 ssh2
+```
+
+#### 23. macOS Console (`macos-console`)
+```bash
+log stream | ./aipipe --format macos-console
+```
+**特点：**
+- 识别 macOS 系统组件错误
+- 理解应用程序崩溃和异常
+- 分析隐私权限和 TCC 问题
+
+**示例日志：**
+```
+2025-10-17 10:00:01.123456+0800 0x7b Default 0x0 0 0 kernel: (AppleH11ANEInterface) ANE0: EnableMemoryUnwireTimer: ERROR: Cannot enable Memory Unwire Timer
+2025-10-17 10:00:02.234567+0800 0x1f11722 Error 0x185174d 386 0 locationd: (TCC) [com.apple.TCC:access] send_message_with_reply_sync(): XPC_ERROR_CONNECTION_INVALID
+2025-10-17 10:00:03.345678+0800 0x1f11e95 Error 0x1851731 558 0 searchpartyd: (TCC) [com.apple.TCC:access] send_message_with_reply_sync(): XPC_ERROR_CONNECTION_INVALID
+```
+
+#### 24. 传统 Syslog (`syslog`)
+```bash
+tail -f /var/log/syslog | ./aipipe --format syslog
+```
+**特点：**
+- 识别传统 Unix 系统日志格式
+- 理解守护进程和系统服务日志
+- 分析网络和安全相关事件
+
+**示例日志：**
+```
+Oct 17 10:00:01 hostname systemd[1]: Started Network Manager Script Dispatcher Service
+Oct 17 10:00:02 hostname kernel: [ 1234.567890] Out of memory: Kill process 1234 (chrome) score 500
+Oct 17 10:00:03 hostname sshd[1234]: Failed password for root from 192.168.1.100 port 22 ssh2
+```
+
 ## 使用建议
 
 ### 1. 选择合适的格式
@@ -335,6 +385,24 @@ tail -f /var/log/postgresql/postgresql.log | ./aipipe --format postgresql
 ./aipipe -f /var/log/jenkins/jenkins.log --format jenkins --batch-size 20
 ```
 
+### 监控 Linux 系统日志
+```bash
+# 使用 journalctl 流式监控
+journalctl -f | ./aipipe --format journald
+
+# 监控传统 syslog
+tail -f /var/log/syslog | ./aipipe --format syslog
+```
+
+### 监控 macOS 系统日志
+```bash
+# 使用 log stream 实时监控
+log stream | ./aipipe --format macos-console
+
+# 监控特定进程
+log stream --predicate 'process == "kernel"' | ./aipipe --format macos-console
+```
+
 ## 未来计划
 
 我们计划继续扩展支持的日志格式，包括：
@@ -346,5 +414,6 @@ tail -f /var/log/postgresql/postgresql.log | ./aipipe --format postgresql
 ---
 
 **作者**: rocky  
-**版本**: 1.1.0  
-**日期**: 2025-10-17
+**版本**: 1.2.0  
+**日期**: 2025-10-17  
+**支持格式总数**: 24 种
