@@ -1207,25 +1207,25 @@ func getFormatSpecificExamples(format string) string {
    - "Redis server version 6.2.6, bits=64"
    - "ERROR: OOM command not allowed when used memory > 'maxmemory'"
    - "WARN: overcommit_memory is set to 0"`
-	
+
 	case "journald":
 		return `Linux journald 特定示例：
    - "Oct 17 10:00:01 systemd[1]: Started Network Manager Script Dispatcher Service"
    - "Oct 17 10:00:02 kernel: [ 1234.567890] Out of memory: Kill process 1234 (chrome) score 500 or sacrifice child"
    - "Oct 17 10:00:03 sshd[1234]: Failed password for root from 192.168.1.100 port 22 ssh2"`
-	
+
 	case "macos-console":
 		return `macOS Console 特定示例：
    - "2025-10-17 10:00:01.123456+0800 0x7b Default 0x0 0 0 kernel: (AppleH11ANEInterface) ANE0: EnableMemoryUnwireTimer: ERROR: Cannot enable Memory Unwire Timer"
    - "2025-10-17 10:00:02.234567+0800 0x1f11722 Error 0x185174d 386 0 locationd: (TCC) [com.apple.TCC:access] send_message_with_reply_sync(): XPC_ERROR_CONNECTION_INVALID"
    - "2025-10-17 10:00:03.345678+0800 0x1f11e95 Error 0x1851731 558 0 searchpartyd: (TCC) [com.apple.TCC:access] send_message_with_reply_sync(): XPC_ERROR_CONNECTION_INVALID"`
-	
+
 	case "syslog":
 		return `Syslog 特定示例：
    - "Oct 17 10:00:01 hostname systemd[1]: Started Network Manager Script Dispatcher Service"
    - "Oct 17 10:00:02 hostname kernel: [ 1234.567890] Out of memory: Kill process 1234 (chrome) score 500"
    - "Oct 17 10:00:03 hostname sshd[1234]: Failed password for root from 192.168.1.100 port 22 ssh2"`
-	
+
 	default:
 		return ""
 	}
