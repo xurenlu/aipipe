@@ -70,6 +70,21 @@ tail -f /var/log/*.log | ./aipipe --format java
   - `ruby` - Ruby 日志
   - `python` - Python 日志
   - `fastapi` - FastAPI 日志
+  - `go` - Go 语言应用日志
+  - `rust` - Rust 应用日志
+  - `csharp` - C#/.NET 应用日志
+  - `kotlin` - Kotlin 应用日志
+  - `nodejs` - Node.js 应用日志
+  - `typescript` - TypeScript 应用日志
+  - `docker` - Docker 容器日志
+  - `kubernetes` - Kubernetes Pod 日志
+  - `postgresql` - PostgreSQL 数据库日志
+  - `mysql` - MySQL 数据库日志
+  - `redis` - Redis 日志
+  - `elasticsearch` - Elasticsearch 日志
+  - `git` - Git 操作日志
+  - `jenkins` - Jenkins CI/CD 日志
+  - `github` - GitHub Actions 日志
 
 - `--verbose`：显示详细输出，包括过滤原因
 

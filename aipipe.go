@@ -101,7 +101,7 @@ type LogLineMerger struct {
 }
 
 var (
-	logFormat        = flag.String("format", "java", "日志格式 (java, php, nginx, ruby, fastapi, python)")
+	logFormat        = flag.String("format", "java", "日志格式 (java, php, nginx, ruby, fastapi, python, go, rust, csharp, kotlin, nodejs, typescript, docker, kubernetes, postgresql, mysql, redis, elasticsearch, git, jenkins, github)")
 	verbose          = flag.Bool("verbose", false, "显示详细输出")
 	filePath         = flag.String("f", "", "要监控的日志文件路径（类似 tail -f）")
 	debug            = flag.Bool("debug", false, "调试模式，打印 HTTP 请求和响应详情")
@@ -1133,8 +1133,90 @@ func applyConservativeFilter(analysis *LogAnalysis) *LogAnalysis {
 	return analysis
 }
 
+// 获取格式特定的示例
+func getFormatSpecificExamples(format string) string {
+	switch format {
+	case "java":
+		return `Java 特定示例：
+   - "INFO com.example.service.UserService - User created successfully"
+   - "ERROR com.example.dao.DatabaseDAO - Connection pool exhausted"
+   - "WARN com.example.controller.AuthController - Invalid JWT token"`
+	
+	case "php":
+		return `PHP 特定示例：
+   - "PHP Notice: Undefined variable $user in /app/index.php"
+   - "PHP Fatal error: Call to undefined function mysql_connect()"
+   - "PHP Warning: file_get_contents() failed to open stream"`
+	
+	case "nginx":
+		return `Nginx 特定示例：
+   - "127.0.0.1 - - [13/Oct/2025:10:00:01 +0000] \"GET /api/health HTTP/1.1\" 200"
+   - "upstream server temporarily disabled while connecting to upstream"
+   - "connect() failed (111: Connection refused) while connecting to upstream"`
+	
+	case "go":
+		return `Go 特定示例：
+   - "INFO: Starting server on :8080"
+   - "ERROR: database connection failed: dial tcp: connection refused"
+   - "WARN: goroutine leak detected"`
+	
+	case "rust":
+		return `Rust 特定示例：
+   - "INFO: Server listening on 127.0.0.1:8080"
+   - "ERROR: thread 'main' panicked at 'index out of bounds'"
+   - "WARN: memory usage high: 512MB"`
+	
+	case "csharp":
+		return `C# 特定示例：
+   - "INFO: Application started"
+   - "ERROR: System.Exception: Database connection timeout"
+   - "WARN: Memory pressure detected"`
+	
+	case "nodejs":
+		return `Node.js 特定示例：
+   - "info: Server running on port 3000"
+   - "error: Error: ENOENT: no such file or directory"
+   - "warn: DeprecationWarning: Buffer() is deprecated"`
+	
+	case "docker":
+		return `Docker 特定示例：
+   - "Container started successfully"
+   - "ERROR: failed to start container: port already in use"
+   - "WARN: container running out of memory"`
+	
+	case "kubernetes":
+		return `Kubernetes 特定示例：
+   - "Pod started successfully"
+   - "ERROR: Failed to pull image: ImagePullBackOff"
+   - "WARN: Pod evicted due to memory pressure"`
+	
+	case "postgresql":
+		return `PostgreSQL 特定示例：
+   - "LOG: database system is ready to accept connections"
+   - "ERROR: relation \"users\" does not exist"
+   - "WARN: checkpoint request timed out"`
+	
+	case "mysql":
+		return `MySQL 特定示例：
+   - "InnoDB: Database was not shut down normally"
+   - "ERROR 1045: Access denied for user 'root'@'localhost'"
+   - "Warning: Aborted connection to db"`
+	
+	case "redis":
+		return `Redis 特定示例：
+   - "Redis server version 6.2.6, bits=64"
+   - "ERROR: OOM command not allowed when used memory > 'maxmemory'"
+   - "WARN: overcommit_memory is set to 0"`
+	
+	default:
+		return ""
+	}
+}
+
 // 构建系统提示词（定义角色和判断标准）
 func buildSystemPrompt(format string) string {
+	formatExamples := getFormatSpecificExamples(format)
+	
 	basePrompt := fmt.Sprintf(`你是一个专业的日志分析助手，专门分析 %s 格式的日志。
 
 你的任务是判断日志是否需要关注，并以 JSON 格式返回分析结果。
@@ -1233,7 +1315,14 @@ func buildSystemPrompt(format string) string {
    
 10. 服务降级和熔断
     - "Circuit breaker opened"
-    - "Service degraded mode activated"
+    - "Service degraded mode activated"`, format)
+
+	// 添加格式特定的示例
+	if formatExamples != "" {
+		basePrompt += "\n\n" + formatExamples
+	}
+
+	basePrompt += `
 
 注意：
 - 如果日志级别是 ERROR 或包含 Exception/Error，通常需要关注
@@ -1246,7 +1335,7 @@ func buildSystemPrompt(format string) string {
 - 在 summary 或 reason 中明确说明"日志内容异常"、"无法判断"等原因
 - 我们采取保守策略：只提示确认重要的信息，不确定的一律过滤
 
-只返回 JSON，不要其他内容。`, format)
+只返回 JSON，不要其他内容。`
 
 	// 如果有自定义提示词，添加到系统提示词中
 	if globalConfig.CustomPrompt != "" {

@@ -14,12 +14,38 @@ tail -f /var/log/app.log | ./aipipe --format java
 
 ### 2. 支持的日志格式
 
+**后端语言：**
 - `java` - Java 应用日志（默认）
 - `php` - PHP 日志
-- `nginx` - Nginx 日志
 - `ruby` - Ruby 日志
 - `python` - Python 日志
 - `fastapi` - FastAPI 日志
+- `go` - Go 语言应用日志
+- `rust` - Rust 应用日志
+- `csharp` - C#/.NET 应用日志
+- `kotlin` - Kotlin 应用日志
+
+**前端和全栈：**
+- `nodejs` - Node.js 应用日志
+- `typescript` - TypeScript 应用日志
+
+**Web 服务器：**
+- `nginx` - Nginx 日志
+
+**云原生和容器：**
+- `docker` - Docker 容器日志
+- `kubernetes` - Kubernetes Pod 日志
+
+**数据库：**
+- `postgresql` - PostgreSQL 数据库日志
+- `mysql` - MySQL 数据库日志
+- `redis` - Redis 日志
+- `elasticsearch` - Elasticsearch 日志
+
+**开发工具：**
+- `git` - Git 操作日志
+- `jenkins` - Jenkins CI/CD 日志
+- `github` - GitHub Actions 日志
 
 ### 3. 运行示例
 
