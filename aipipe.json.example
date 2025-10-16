@@ -1,0 +1,6 @@
+{
+  "ai_endpoint": "https://your-ai-server.com/api/v1/chat/completions",
+  "token": "your-api-token-here",
+  "model": "gpt-4",
+  "custom_prompt": "请特别注意以下情况：\n1. 数据库连接问题\n2. 内存泄漏警告\n3. 安全相关日志\n4. 性能瓶颈指标\n\n请根据这些特殊要求调整判断标准。"
+}
