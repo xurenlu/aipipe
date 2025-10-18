@@ -120,7 +120,7 @@ jobs:
 
       - name: Generate checksums
         run: |
-          sha256sum aipipe-*.tar.gz aipipe-*.zip > checksums.txt
+          sha256sum aipipe-*.tar.gz > checksums.txt
 
       - name: Create Release Notes
         id: release_notes
