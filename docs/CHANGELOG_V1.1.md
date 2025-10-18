@@ -167,7 +167,7 @@ tail -f /var/log/postgresql/postgresql.log | ./aipipe --format postgresql
 
 ---
 
-**作者**: rocky  
+**作者**: xurenlu  
 **版本**: v1.1.0  
 **日期**: 2025-10-17  
 **GitHub**: https://github.com/xurenlu/aipipe

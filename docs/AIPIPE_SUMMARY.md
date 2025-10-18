@@ -359,7 +359,7 @@ cat old.log | ./aipipe --format java
 
 ### 编译
 ```bash
-cd /Users/rocky/bin
+cd /Users/xurenlu/bin
 go build -o aipipe aipipe.go
 ```
 
@@ -438,16 +438,16 @@ import (
 
 ## 项目信息
 
-- **作者**：rocky
+- **作者**：xurenlu
 - **语言**：Go
 - **版本**：1.0.0
 - **日期**：2025-10-13
-- **位置**：/Users/rocky/bin/
+- **位置**：/Users/xurenlu/bin/
 
 ## 相关文件位置
 
 ```
-/Users/rocky/bin/
+/Users/xurenlu/bin/
 ├── aipipe                     # 可执行文件
 ├── aipipe.go                  # 源代码（600+ 行）
 │

@@ -587,7 +587,7 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ## 👤 作者
 
-**rocky** <m@some.im>
+**xurenlu** <m@some.im>
 
 ## 🙏 致谢
 

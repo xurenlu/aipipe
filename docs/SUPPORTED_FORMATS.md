@@ -413,7 +413,7 @@ log stream --predicate 'process == "kernel"' | ./aipipe --format macos-console
 
 ---
 
-**作者**: rocky  
+**作者**: xurenlu  
 **版本**: 1.2.0  
 **日期**: 2025-10-17  
 **支持格式总数**: 24 种

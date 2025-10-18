@@ -1,4 +1,4 @@
-module github.com/rocky/aipipe
+module github.com/xurenlu/aipipe
 
 go 1.21
 

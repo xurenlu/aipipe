@@ -1,6 +1,6 @@
 [Unit]
 Description=AIPipe Log Monitor Service
-Documentation=https://github.com/rocky/aipipe
+Documentation=https://github.com/xurenlu/aipipe
 After=network.target network-online.target
 Wants=network-online.target
 

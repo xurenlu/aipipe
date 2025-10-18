@@ -346,9 +346,9 @@ WantedBy=multi-user.target
 
 ## 👤 作者
 
-**rocky** 
+**xurenlu** 
 - Email: m@some.im
-- GitHub: [@rocky](https://github.com/rocky)
+- GitHub: [@xurenlu](https://github.com/xurenlu)
 
 ## 🌟 Star History
 
@@ -356,5 +356,5 @@ WantedBy=multi-user.target
 
 ---
 
-Made with ❤️ by rocky
+Made with ❤️ by xurenlu
 

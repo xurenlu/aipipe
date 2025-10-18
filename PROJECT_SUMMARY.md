@@ -92,10 +92,10 @@ type NotifierConfig struct {
 ### 1. 安装
 ```bash
 # 一键安装
-curl -fsSL https://raw.githubusercontent.com/rocky/aipipe/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/xurenlu/aipipe/main/install.sh | bash
 
 # 或手动安装
-git clone https://github.com/rocky/aipipe.git
+git clone https://github.com/xurenlu/aipipe.git
 cd aipipe
 go build -o aipipe aipipe.go
 ```

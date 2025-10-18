@@ -19,7 +19,7 @@ AIPipe 是一个智能日志过滤和监控工具，使用 AI 自动分析日志
 ## 安装
 
 ```bash
-cd /Users/rocky/bin
+cd /Users/xurenlu/bin
 go build -o aipipe aipipe.go
 ```
 
@@ -591,6 +591,6 @@ afplay /System/Library/Sounds/Glass.aiff
 ## 版本信息
 
 - 版本：1.0.0
-- 作者：rocky
+- 作者：xurenlu
 - 日期：2025-10-13
 

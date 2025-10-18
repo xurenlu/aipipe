@@ -1089,7 +1089,7 @@ time ./aipipe -f app.log --format java --no-batch
 
 ---
 
-**作者**: rocky  
+**作者**: xurenlu  
 **版本**: v1.2.0  
 **日期**: 2025-10-17  
 **支持格式**: 24 种日志格式  

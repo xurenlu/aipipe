@@ -271,6 +271,6 @@ log stream --predicate 'process == "diskmanagementd"' | ./aipipe --format macos-
 
 ---
 
-**作者**: rocky  
+**作者**: xurenlu  
 **版本**: v1.2.0  
 **日期**: 2025-10-17
