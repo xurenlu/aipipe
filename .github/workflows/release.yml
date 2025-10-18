@@ -122,14 +122,6 @@ jobs:
           tar -czf ../../aipipe-${{ steps.set_tag.outputs.tag }}-linux-amd64.tar.gz aipipe README.md README_aipipe.md aipipe-quickstart.md
           cd ../..
 
-      - name: Create release archive for Linux arm64
-        run: |
-          cd artifacts/aipipe-linux-arm64
-          cp ../../README.md .
-          cp ../../docs/README_aipipe.md .
-          cp ../../docs/aipipe-quickstart.md .
-          tar -czf ../../aipipe-${{ steps.set_tag.outputs.tag }}-linux-arm64.tar.gz aipipe README.md README_aipipe.md aipipe-quickstart.md
-          cd ../..
 
       - name: Create release archive for Windows amd64
         run: |
@@ -243,7 +235,6 @@ jobs:
           - **macOS (Intel)**: aipipe-${{ steps.set_tag.outputs.tag }}-darwin-amd64.tar.gz
           - **macOS (Apple Silicon)**: aipipe-${{ steps.set_tag.outputs.tag }}-darwin-arm64.tar.gz
           - **Linux (x86_64)**: aipipe-${{ steps.set_tag.outputs.tag }}-linux-amd64.tar.gz
-          - **Linux (ARM64)**: aipipe-${{ steps.set_tag.outputs.tag }}-linux-arm64.tar.gz
           - **Windows (x86_64)**: aipipe-${{ steps.set_tag.outputs.tag }}-windows-amd64.zip
           - **Windows (ARM64)**: aipipe-${{ steps.set_tag.outputs.tag }}-windows-arm64.zip
           
@@ -277,7 +268,6 @@ jobs:
             aipipe-${{ steps.set_tag.outputs.tag }}-darwin-amd64.tar.gz
             aipipe-${{ steps.set_tag.outputs.tag }}-darwin-arm64.tar.gz
             aipipe-${{ steps.set_tag.outputs.tag }}-linux-amd64.tar.gz
-            aipipe-${{ steps.set_tag.outputs.tag }}-linux-arm64.tar.gz
             aipipe-${{ steps.set_tag.outputs.tag }}-windows-amd64.zip
             aipipe-${{ steps.set_tag.outputs.tag }}-windows-arm64.zip
             checksums.txt
