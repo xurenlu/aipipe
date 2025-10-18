@@ -57,12 +57,7 @@ jobs:
           go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o aipipe${{ matrix.suffix }} aipipe.go
 
       - name: Test binary
-        run: |
-          if [[ "${{ matrix.goos }}" == "windows" ]]; then
-            ./aipipe${{ matrix.suffix }} --help
-          else
-            ./aipipe${{ matrix.suffix }} --help
-          fi
+        run: ./aipipe${{ matrix.suffix }} --help
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -123,24 +118,6 @@ jobs:
           cd ../..
 
 
-      - name: Create release archive for Windows amd64
-        run: |
-          cd artifacts/aipipe-windows-amd64
-          cp ../../README.md .
-          cp ../../docs/README_aipipe.md .
-          cp ../../docs/aipipe-quickstart.md .
-          zip -r ../../aipipe-${{ steps.set_tag.outputs.tag }}-windows-amd64.zip aipipe.exe README.md README_aipipe.md aipipe-quickstart.md
-          cd ../..
-
-      - name: Create release archive for Windows arm64
-        run: |
-          cd artifacts/aipipe-windows-arm64
-          cp ../../README.md .
-          cp ../../docs/README_aipipe.md .
-          cp ../../docs/aipipe-quickstart.md .
-          zip -r ../../aipipe-${{ steps.set_tag.outputs.tag }}-windows-arm64.zip aipipe.exe README.md README_aipipe.md aipipe-quickstart.md
-          cd ../..
-
       - name: Generate checksums
         run: |
           sha256sum aipipe-*.tar.gz aipipe-*.zip > checksums.txt
@@ -159,7 +136,7 @@ jobs:
           
           - 🤖 **AI 智能分析**: 使用 AI 自动判断日志重要性
           - 🌍 **24 种日志格式支持**: 覆盖主流编程语言、数据库、云原生工具
-          - 🔔 **实时通知**: 重要日志发送系统通知（支持 macOS、Linux、Windows）
+          - 🔔 **实时通知**: 重要日志发送系统通知（支持 macOS、Linux）
           - 📦 **批处理模式**: 智能累积多行日志批量分析，节省 API 调用
           - ⚡ **本地预过滤**: DEBUG/INFO 级别日志本地处理，大幅提升性能
           - 🛡️ **保守策略**: AI 无法确定时默认过滤，避免误报
@@ -235,8 +212,6 @@ jobs:
           - **macOS (Intel)**: aipipe-${{ steps.set_tag.outputs.tag }}-darwin-amd64.tar.gz
           - **macOS (Apple Silicon)**: aipipe-${{ steps.set_tag.outputs.tag }}-darwin-arm64.tar.gz
           - **Linux (x86_64)**: aipipe-${{ steps.set_tag.outputs.tag }}-linux-amd64.tar.gz
-          - **Windows (x86_64)**: aipipe-${{ steps.set_tag.outputs.tag }}-windows-amd64.zip
-          - **Windows (ARM64)**: aipipe-${{ steps.set_tag.outputs.tag }}-windows-arm64.zip
           
           ## 🔍 验证下载
           
@@ -268,8 +243,6 @@ jobs:
             aipipe-${{ steps.set_tag.outputs.tag }}-darwin-amd64.tar.gz
             aipipe-${{ steps.set_tag.outputs.tag }}-darwin-arm64.tar.gz
             aipipe-${{ steps.set_tag.outputs.tag }}-linux-amd64.tar.gz
-            aipipe-${{ steps.set_tag.outputs.tag }}-windows-amd64.zip
-            aipipe-${{ steps.set_tag.outputs.tag }}-windows-arm64.zip
             checksums.txt
           draft: false
           prerelease: ${{ contains(steps.set_tag.outputs.tag, 'beta') || contains(steps.set_tag.outputs.tag, 'alpha') || contains(steps.set_tag.outputs.tag, 'rc') }}
