@@ -2,6 +2,7 @@
 
 # AIPipe 一键安装脚本
 # 支持 macOS 和 Linux 系统
+# 从 GitHub Release 下载预编译二进制文件
 
 set -e
 
@@ -32,7 +33,7 @@ print_error() {
 # 检查系统类型
 detect_os() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        OS="macos"
+        OS="darwin"
     elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
         OS="linux"
     else
@@ -52,9 +53,6 @@ detect_arch() {
         arm64|aarch64)
             ARCH="arm64"
             ;;
-        armv7l)
-            ARCH="arm"
-            ;;
         *)
             print_error "不支持的架构: $ARCH"
             exit 1
@@ -63,99 +61,76 @@ detect_arch() {
     print_info "检测到架构: $ARCH"
 }
 
-# 检查依赖
-check_dependencies() {
-    print_info "检查依赖..."
+# 获取最新版本
+get_latest_version() {
+    print_info "获取最新版本信息..."
     
-    # 检查 Go
-    if ! command -v go &> /dev/null; then
-        print_warning "Go 未安装，正在安装..."
-        install_go
-    else
-        GO_VERSION=$(go version | cut -d' ' -f3)
-        print_success "Go 已安装: $GO_VERSION"
-    fi
+    # 使用 GitHub API 获取最新 release
+    LATEST_VERSION=$(curl -s https://api.github.com/repos/xurenlu/aipipe/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
     
-    # 检查 Git
-    if ! command -v git &> /dev/null; then
-        print_error "Git 未安装，请先安装 Git"
+    if [[ -z "$LATEST_VERSION" ]]; then
+        print_error "无法获取最新版本信息"
         exit 1
     fi
-    print_success "Git 已安装"
+    
+    print_success "最新版本: $LATEST_VERSION"
+    VERSION="$LATEST_VERSION"
 }
 
-# 安装 Go (仅限 macOS 和 Linux)
-install_go() {
-    if [[ "$OS" == "macos" ]]; then
-        if command -v brew &> /dev/null; then
-            print_info "使用 Homebrew 安装 Go..."
-            brew install go
+# 下载并安装二进制文件
+download_and_install() {
+    print_info "下载 AIPipe 二进制文件..."
+    
+    # 构建下载URL
+    if [[ "$OS" == "darwin" ]]; then
+        if [[ "$ARCH" == "arm64" ]]; then
+            FILENAME="aipipe-${VERSION}-darwin-arm64.tar.gz"
         else
-            print_error "请先安装 Homebrew 或手动安装 Go"
-            exit 1
+            FILENAME="aipipe-${VERSION}-darwin-amd64.tar.gz"
         fi
     elif [[ "$OS" == "linux" ]]; then
-        print_info "下载并安装 Go..."
-        GO_VERSION="1.21.0"
-        wget -q "https://golang.org/dl/go${GO_VERSION}.linux-${ARCH}.tar.gz"
-        sudo rm -rf /usr/local/go
-        sudo tar -C /usr/local -xzf "go${GO_VERSION}.linux-${ARCH}.tar.gz"
-        rm "go${GO_VERSION}.linux-${ARCH}.tar.gz"
-        
-        # 添加到 PATH
-        if ! grep -q "/usr/local/go/bin" ~/.bashrc; then
-            echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.bashrc
-        fi
-        if ! grep -q "/usr/local/go/bin" ~/.profile; then
-            echo 'export PATH=$PATH:/usr/local/go/bin' >> ~/.profile
-        fi
-        export PATH=$PATH:/usr/local/go/bin
+        FILENAME="aipipe-${VERSION}-linux-amd64.tar.gz"
     fi
-}
-
-# 下载并编译 AIPipe
-build_aipipe() {
-    print_info "下载并编译 AIPipe..."
+    
+    DOWNLOAD_URL="https://github.com/xurenlu/aipipe/releases/download/${VERSION}/${FILENAME}"
+    
+    print_info "下载地址: $DOWNLOAD_URL"
     
     # 创建临时目录
     TEMP_DIR=$(mktemp -d)
     cd "$TEMP_DIR"
     
-    # 克隆仓库
-    print_info "从 GitHub 下载源码..."
-    git clone https://github.com/xurenlu/aipipe.git .
-    
-    # 编译
-    print_info "编译 AIPipe..."
-    go mod tidy
-    go build -o aipipe aipipe.go
-    
-    # 检查编译结果
-    if [[ -f "aipipe" ]]; then
-        print_success "编译成功"
-    else
-        print_error "编译失败"
+    # 下载文件
+    print_info "正在下载 $FILENAME..."
+    if ! curl -L -o "$FILENAME" "$DOWNLOAD_URL"; then
+        print_error "下载失败，请检查网络连接或版本信息"
         exit 1
     fi
-}
-
-# 安装二进制文件
-install_binary() {
-    print_info "安装 AIPipe 二进制文件..."
     
-    # 创建安装目录
-    INSTALL_DIR="/usr/local/bin"
-    if [[ "$OS" == "macos" ]]; then
-        INSTALL_DIR="/usr/local/bin"
-    elif [[ "$OS" == "linux" ]]; then
-        INSTALL_DIR="/usr/local/bin"
+    # 解压文件
+    print_info "解压文件..."
+    tar -xzf "$FILENAME"
+    
+    # 检查二进制文件
+    if [[ ! -f "aipipe" ]]; then
+        print_error "解压后未找到 aipipe 二进制文件"
+        exit 1
     fi
     
-    # 复制二进制文件
-    sudo cp aipipe "$INSTALL_DIR/"
-    sudo chmod +x "$INSTALL_DIR/aipipe"
+    # 安装二进制文件
+    print_info "安装 AIPipe 到 /usr/local/bin..."
+    sudo cp aipipe /usr/local/bin/
+    sudo chmod +x /usr/local/bin/aipipe
     
-    print_success "AIPipe 已安装到 $INSTALL_DIR/aipipe"
+    print_success "AIPipe 已安装到 /usr/local/bin/aipipe"
+    
+    # 验证安装
+    if command -v aipipe &> /dev/null; then
+        INSTALLED_VERSION=$(aipipe --version 2>/dev/null || echo "unknown")
+        print_success "安装成功! 版本: $INSTALLED_VERSION"
+    else
+        print_warning "安装完成，但无法验证版本"
+    fi
 }
 
 # 创建配置目录和文件
@@ -338,9 +313,8 @@ main() {
     # 执行安装步骤
     detect_os
     detect_arch
-    check_dependencies
-    build_aipipe
-    install_binary
+    get_latest_version
+    download_and_install
     setup_config
     setup_systemd_service
     create_startup_script
