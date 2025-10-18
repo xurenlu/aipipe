@@ -14,6 +14,16 @@
       "from_email": "your-email@gmail.com",
       "to_emails": ["admin@company.com", "devops@company.com"]
     },
+    "_email_resend_example": {
+      "enabled": false,
+      "provider": "resend",
+      "host": "",
+      "port": 0,
+      "username": "",
+      "password": "re_xxxxxxxxxxxxx",
+      "from_email": "alerts@yourdomain.com",
+      "to_emails": ["admin@company.com"]
+    },
     "dingtalk": {
       "enabled": false,
       "url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"

@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -1720,6 +1721,34 @@ func sendNotification(summary, logLine string) {
 
 // 发送系统通知
 func sendSystemNotification(summary, displayLog string) {
+	// 检测操作系统并发送相应的通知
+	if isMacOS() {
+		sendMacOSNotification(summary, displayLog)
+	} else if isLinux() {
+		sendLinuxNotification(summary, displayLog)
+	} else {
+		if *verbose || *debug {
+			log.Printf("⚠️  不支持的操作系统，跳过系统通知")
+		}
+		return
+	}
+
+	// 播放系统声音
+	go playSystemSound()
+}
+
+// 检测是否为 macOS
+func isMacOS() bool {
+	return strings.Contains(strings.ToLower(runtime.GOOS), "darwin")
+}
+
+// 检测是否为 Linux
+func isLinux() bool {
+	return strings.Contains(strings.ToLower(runtime.GOOS), "linux")
+}
+
+// 发送 macOS 通知
+func sendMacOSNotification(summary, displayLog string) {
 	// 使用 osascript 通过标准输入发送通知（更好地支持 UTF-8 中文）
 	script := fmt.Sprintf(`display notification "%s" with title "⚠️ 重要日志告警" subtitle "%s"`,
 		escapeForAppleScript(displayLog),
@@ -1735,21 +1764,61 @@ func sendSystemNotification(summary, displayLog string) {
 
 	if err != nil {
 		if *verbose || *debug {
-			log.Printf("⚠️  发送系统通知失败: %v", err)
+			log.Printf("⚠️  发送 macOS 通知失败: %v", err)
 			log.Printf("💡 请检查通知权限：系统设置 > 通知 > 终端")
 		}
 	} else {
 		if *verbose || *debug {
-			log.Printf("✅ 系统通知已发送: %s", summary)
+			log.Printf("✅ macOS 通知已发送: %s", summary)
 		}
 	}
+}
 
-	// 直接使用 afplay 播放声音（更可靠）
-	go playSystemSound()
+// 发送 Linux 通知
+func sendLinuxNotification(summary, displayLog string) {
+	// 尝试使用 notify-send (需要安装 libnotify-bin)
+	cmd := exec.Command("notify-send",
+		"⚠️ 重要日志告警",
+		fmt.Sprintf("%s\n%s", summary, displayLog),
+		"--urgency=critical",
+		"--expire-time=10000")
+
+	err := cmd.Run()
+
+	if err != nil {
+		// 如果 notify-send 失败，尝试使用其他方式
+		if *verbose || *debug {
+			log.Printf("⚠️  notify-send 失败，尝试其他通知方式: %v", err)
+		}
+
+		// 可以在这里添加其他 Linux 通知方式，比如：
+		// - 写入到系统日志
+		// - 发送到桌面通知服务
+		// - 等等
+
+		if *verbose || *debug {
+			log.Printf("⚠️  Linux 系统通知发送失败")
+		}
+		return
+	}
+
+	if *verbose || *debug {
+		log.Printf("✅ Linux 通知已发送: %s", summary)
+	}
 }
 
 // 播放系统提示音
 func playSystemSound() {
+	if isMacOS() {
+		playMacOSSound()
+	} else if isLinux() {
+		playLinuxSound()
+	}
+	// 其他平台不播放声音，静默失败
+}
+
+// 播放 macOS 系统声音
+func playMacOSSound() {
 	// 使用 afplay 播放系统声音文件（经验证此方式可靠）
 	soundPaths := []string{
 		"/System/Library/Sounds/Glass.aiff",
@@ -1764,7 +1833,7 @@ func playSystemSound() {
 		cmd := exec.Command("afplay", soundPath)
 		if err := cmd.Run(); err == nil {
 			if *verbose || *debug {
-				log.Printf("🔊 播放声音: %s", soundPath)
+				log.Printf("🔊 播放 macOS 声音: %s", soundPath)
 			}
 			return // 播放成功
 		}
@@ -1772,10 +1841,45 @@ func playSystemSound() {
 
 	// 如果所有声音文件都失败，使用 beep 作为最后保障
 	if *verbose || *debug {
-		log.Printf("⚠️  系统声音文件不可用，使用 beep")
+		log.Printf("⚠️  macOS 声音文件不可用，使用 beep")
 	}
 	cmd := exec.Command("osascript", "-e", "beep 1")
 	cmd.Run()
+}
+
+// 播放 Linux 系统声音
+func playLinuxSound() {
+	// 尝试使用 paplay (PulseAudio)
+	cmd := exec.Command("paplay", "/usr/share/sounds/alsa/Front_Left.wav")
+	if err := cmd.Run(); err == nil {
+		if *verbose || *debug {
+			log.Printf("🔊 播放 Linux 声音: PulseAudio")
+		}
+		return
+	}
+
+	// 尝试使用 aplay (ALSA)
+	cmd = exec.Command("aplay", "/usr/share/sounds/alsa/Front_Left.wav")
+	if err := cmd.Run(); err == nil {
+		if *verbose || *debug {
+			log.Printf("🔊 播放 Linux 声音: ALSA")
+		}
+		return
+	}
+
+	// 尝试使用 speaker-test (生成测试音)
+	cmd = exec.Command("speaker-test", "-t", "sine", "-f", "1000", "-l", "1")
+	if err := cmd.Run(); err == nil {
+		if *verbose || *debug {
+			log.Printf("🔊 播放 Linux 声音: speaker-test")
+		}
+		return
+	}
+
+	// 如果所有方式都失败，静默失败
+	if *verbose || *debug {
+		log.Printf("⚠️  Linux 声音播放失败")
+	}
 }
 
 // 转义 AppleScript 字符串
