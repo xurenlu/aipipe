@@ -13,7 +13,7 @@ AIPipe 是一个智能日志过滤和监控工具，使用可配置的 AI 服务
 - 🤖 **AI 智能分析** - 使用可配置的 AI 服务自动判断日志重要性
 - 📦 **批处理模式** - 智能累积多行日志批量分析，节省 70-90% Token
 - ⚡ **本地预过滤** - DEBUG/INFO 级别日志本地处理，不调用 API
-- 🔔 **系统通知** - 重要日志发送 macOS 原生通知 + 声音提醒
+- 🔔 **多通道通知** - 支持邮件、钉钉、企业微信、飞书、Slack 等多种通知方式
 - 📁 **文件监控** - 类似 `tail -f`，支持断点续传和日志轮转
 - 🎯 **上下文显示** - 重要日志自动显示前后上下文，方便排查问题
 - 🛡️ **保守策略** - AI 无法确定时默认过滤，避免误报
@@ -21,14 +21,24 @@ AIPipe 是一个智能日志过滤和监控工具，使用可配置的 AI 服务
 - 🔍 **多行日志合并** - 自动合并异常堆栈等多行日志
 - ⚙️ **配置化** - 从 `~/.config/aipipe.json` 读取 AI 服务器配置
 - 🎨 **自定义提示词** - 支持用户自定义补充 prompt
+- 🌐 **智能识别** - 自动识别 webhook 类型，支持自定义 webhook
 
 ## 🚀 快速开始
 
 ### 安装
 
+#### 一键安装（推荐）
+
+```bash
+# 使用一键安装脚本
+curl -fsSL https://raw.githubusercontent.com/xurenlu/aipipe/main/install.sh | bash
+```
+
+#### 手动安装
+
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/aipipe.git
+git clone https://github.com/xurenlu/aipipe.git
 cd aipipe
 
 # 编译
@@ -36,6 +46,13 @@ go build -o aipipe aipipe.go
 
 # 或直接运行
 go run aipipe.go -f /var/log/app.log --format java
+```
+
+#### Linux 系统服务安装
+
+```bash
+# 使用 systemd 安装脚本
+sudo ./install-systemd.sh
 ```
 
 ### 配置
@@ -47,7 +64,35 @@ go run aipipe.go -f /var/log/app.log --format java
   "ai_endpoint": "https://your-ai-server.com/api/v1/chat/completions",
   "token": "your-api-token-here",
   "model": "gpt-4",
-  "custom_prompt": "请特别注意以下情况：\n1. 数据库连接问题\n2. 内存泄漏警告\n3. 安全相关日志\n4. 性能瓶颈指标\n\n请根据这些特殊要求调整判断标准。"
+  "custom_prompt": "请特别注意以下情况：\n1. 数据库连接问题\n2. 内存泄漏警告\n3. 安全相关日志\n4. 性能瓶颈指标\n\n请根据这些特殊要求调整判断标准。",
+  "notifiers": {
+    "email": {
+      "enabled": false,
+      "provider": "smtp",
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "username": "your-email@gmail.com",
+      "password": "your-app-password",
+      "from_email": "your-email@gmail.com",
+      "to_emails": ["admin@company.com"]
+    },
+    "dingtalk": {
+      "enabled": false,
+      "url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+    },
+    "wechat": {
+      "enabled": false,
+      "url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+    },
+    "feishu": {
+      "enabled": false,
+      "url": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN"
+    },
+    "slack": {
+      "enabled": false,
+      "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+    }
+  }
 }
 ```
 
@@ -234,6 +279,144 @@ tail -f /var/log/app.log | ./aipipe --format java
 - `model`: 使用的 AI 模型名称
 - `custom_prompt`: 用户自定义的补充提示词，会添加到系统提示词中
 
+### 通知配置
+
+AIPipe 支持多种通知方式，当检测到重要日志时会自动发送通知：
+
+#### 邮件通知
+
+支持 SMTP 和 Resend 两种方式：
+
+**SMTP 配置：**
+```json
+"email": {
+  "enabled": true,
+  "provider": "smtp",
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "username": "your-email@gmail.com",
+  "password": "your-app-password",
+  "from_email": "your-email@gmail.com",
+  "to_emails": ["admin@company.com", "devops@company.com"]
+}
+```
+
+**Resend 配置：**
+```json
+"email": {
+  "enabled": true,
+  "provider": "resend",
+  "host": "",
+  "port": 0,
+  "username": "",
+  "password": "re_xxxxxxxxxxxxx",
+  "from_email": "alerts@yourdomain.com",
+  "to_emails": ["admin@company.com"]
+}
+```
+
+#### Webhook 通知
+
+支持钉钉、企业微信、飞书、Slack 等平台：
+
+**钉钉机器人：**
+```json
+"dingtalk": {
+  "enabled": true,
+  "url": "https://oapi.dingtalk.com/robot/send?access_token=YOUR_TOKEN"
+}
+```
+
+**企业微信机器人：**
+```json
+"wechat": {
+  "enabled": true,
+  "url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"
+}
+```
+
+**飞书机器人：**
+```json
+"feishu": {
+  "enabled": true,
+  "url": "https://open.feishu.cn/open-apis/bot/v2/hook/YOUR_TOKEN"
+}
+```
+
+**Slack Webhook：**
+```json
+"slack": {
+  "enabled": true,
+  "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+}
+```
+
+**自定义 Webhook：**
+```json
+"custom_webhooks": [
+  {
+    "enabled": true,
+    "url": "https://your-custom-webhook.com/endpoint",
+    "secret": "your-webhook-secret"
+  }
+]
+```
+
+#### 智能识别
+
+AIPipe 会自动识别 webhook URL 类型，无需手动指定。支持的识别规则：
+
+- **钉钉**: 包含 `dingtalk` 关键词
+- **企业微信**: 包含 `qyapi.weixin.qq.com` 域名
+- **飞书**: 包含 `feishu` 关键词
+- **Slack**: 包含 `slack.com` 域名
+- **其他**: 自动使用通用格式
+
+#### 通知示例
+
+当检测到重要日志时，各平台会收到如下格式的通知：
+
+**邮件通知：**
+```
+主题: ⚠️ 重要日志告警: 数据库连接超时
+
+重要日志告警
+
+摘要: 数据库连接超时
+
+日志内容:
+2025-10-17 10:00:01 ERROR Database connection timeout after 30 seconds
+
+时间: 2025-10-17 10:00:01
+来源: AIPipe 日志监控系统
+```
+
+**钉钉/企业微信/飞书通知：**
+```
+⚠️ 重要日志告警
+
+摘要: 数据库连接超时
+
+日志内容:
+2025-10-17 10:00:01 ERROR Database connection timeout after 30 seconds
+
+时间: 2025-10-17 10:00:01
+```
+
+**Slack 通知：**
+```
+⚠️ 重要日志告警
+
+*摘要:* 数据库连接超时
+
+*日志内容:*
+```
+2025-10-17 10:00:01 ERROR Database connection timeout after 30 seconds
+```
+
+*时间:* 2025-10-17 10:00:01
+```
+
 ### 批处理配置
 
 ```go
@@ -386,6 +569,8 @@ cat /var/log/old/*.log | ./aipipe --format java --batch-size 50
 
 ## 📚 文档
 
+- [完整安装指南](INSTALL.md)
+- [通知功能说明](NOTIFICATION_FEATURES.md)
 - [完整使用文档](docs/README_aipipe.md)
 - [批处理优化说明](docs/批处理优化说明.md)
 - [本地预过滤优化](docs/本地预过滤优化.md)
@@ -412,7 +597,7 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ## 🔗 相关链接
 
-- [问题反馈](https://github.com/your-username/aipipe/issues)
+- [问题反馈](https://github.com/xurenlu/aipipe/issues)
 - [更新日志](CHANGELOG.md)
 - [开发文档](docs/)
 

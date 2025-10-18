@@ -3,12 +3,15 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/smtp"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,12 +24,42 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// 邮件配置
+type EmailConfig struct {
+	Enabled   bool     `json:"enabled"`
+	Provider  string   `json:"provider"`   // "smtp" 或 "resend"
+	Host      string   `json:"host"`       // SMTP服务器地址
+	Port      int      `json:"port"`       // SMTP端口
+	Username  string   `json:"username"`   // 用户名
+	Password  string   `json:"password"`   // 密码或API密钥
+	FromEmail string   `json:"from_email"` // 发件人邮箱
+	ToEmails  []string `json:"to_emails"`  // 收件人邮箱列表
+}
+
+// Webhook配置
+type WebhookConfig struct {
+	Enabled bool   `json:"enabled"`
+	URL     string `json:"url"`
+	Secret  string `json:"secret,omitempty"` // 可选的签名密钥
+}
+
+// 通知器配置
+type NotifierConfig struct {
+	Email          EmailConfig     `json:"email"`
+	DingTalk       WebhookConfig   `json:"dingtalk"`
+	WeChat         WebhookConfig   `json:"wechat"`
+	Feishu         WebhookConfig   `json:"feishu"`
+	Slack          WebhookConfig   `json:"slack"`
+	CustomWebhooks []WebhookConfig `json:"custom_webhooks,omitempty"`
+}
+
 // 配置文件结构
 type Config struct {
-	AIEndpoint   string `json:"ai_endpoint"`
-	Token        string `json:"token"`
-	Model        string `json:"model"`
-	CustomPrompt string `json:"custom_prompt"`
+	AIEndpoint   string         `json:"ai_endpoint"`
+	Token        string         `json:"token"`
+	Model        string         `json:"model"`
+	CustomPrompt string         `json:"custom_prompt"`
+	Notifiers    NotifierConfig `json:"notifiers"`
 }
 
 // 默认配置
@@ -35,6 +68,35 @@ var defaultConfig = Config{
 	Token:        "your-api-token-here",
 	Model:        "gpt-4",
 	CustomPrompt: "",
+	Notifiers: NotifierConfig{
+		Email: EmailConfig{
+			Enabled:   false,
+			Provider:  "smtp",
+			Host:      "smtp.gmail.com",
+			Port:      587,
+			Username:  "",
+			Password:  "",
+			FromEmail: "",
+			ToEmails:  []string{},
+		},
+		DingTalk: WebhookConfig{
+			Enabled: false,
+			URL:     "",
+		},
+		WeChat: WebhookConfig{
+			Enabled: false,
+			URL:     "",
+		},
+		Feishu: WebhookConfig{
+			Enabled: false,
+			URL:     "",
+		},
+		Slack: WebhookConfig{
+			Enabled: false,
+			URL:     "",
+		},
+		CustomWebhooks: []WebhookConfig{},
+	},
 }
 
 // 全局配置变量
@@ -1618,7 +1680,7 @@ func parseAnalysisResponse(response string) (*LogAnalysis, error) {
 	return &analysis, nil
 }
 
-// 发送 macOS 通知
+// 发送通知（支持多种方式）
 func sendNotification(summary, logLine string) {
 	// 截断日志内容，避免通知太长
 	displayLog := logLine
@@ -1626,6 +1688,38 @@ func sendNotification(summary, logLine string) {
 		displayLog = displayLog[:100] + "..."
 	}
 
+	// 发送系统通知
+	sendSystemNotification(summary, displayLog)
+
+	// 发送邮件通知
+	if globalConfig.Notifiers.Email.Enabled {
+		go sendEmailNotification(summary, logLine)
+	}
+
+	// 发送webhook通知
+	if globalConfig.Notifiers.DingTalk.Enabled {
+		go sendWebhookNotification(globalConfig.Notifiers.DingTalk, summary, logLine, "dingtalk")
+	}
+	if globalConfig.Notifiers.WeChat.Enabled {
+		go sendWebhookNotification(globalConfig.Notifiers.WeChat, summary, logLine, "wechat")
+	}
+	if globalConfig.Notifiers.Feishu.Enabled {
+		go sendWebhookNotification(globalConfig.Notifiers.Feishu, summary, logLine, "feishu")
+	}
+	if globalConfig.Notifiers.Slack.Enabled {
+		go sendWebhookNotification(globalConfig.Notifiers.Slack, summary, logLine, "slack")
+	}
+
+	// 发送自定义webhook通知
+	for _, webhook := range globalConfig.Notifiers.CustomWebhooks {
+		if webhook.Enabled {
+			go sendWebhookNotification(webhook, summary, logLine, "custom")
+		}
+	}
+}
+
+// 发送系统通知
+func sendSystemNotification(summary, displayLog string) {
 	// 使用 osascript 通过标准输入发送通知（更好地支持 UTF-8 中文）
 	script := fmt.Sprintf(`display notification "%s" with title "⚠️ 重要日志告警" subtitle "%s"`,
 		escapeForAppleScript(displayLog),
@@ -1641,12 +1735,12 @@ func sendNotification(summary, logLine string) {
 
 	if err != nil {
 		if *verbose || *debug {
-			log.Printf("⚠️  发送通知失败: %v", err)
+			log.Printf("⚠️  发送系统通知失败: %v", err)
 			log.Printf("💡 请检查通知权限：系统设置 > 通知 > 终端")
 		}
 	} else {
 		if *verbose || *debug {
-			log.Printf("✅ 通知已发送: %s", summary)
+			log.Printf("✅ 系统通知已发送: %s", summary)
 		}
 	}
 
@@ -1915,4 +2009,325 @@ func (m *LogLineMerger) Flush() (string, bool) {
 		return result, true
 	}
 	return "", false
+}
+
+// 发送邮件通知
+func sendEmailNotification(summary, logLine string) {
+	emailConfig := globalConfig.Notifiers.Email
+
+	if !emailConfig.Enabled || len(emailConfig.ToEmails) == 0 {
+		return
+	}
+
+	subject := fmt.Sprintf("⚠️ 重要日志告警: %s", summary)
+	body := fmt.Sprintf(`
+重要日志告警
+
+摘要: %s
+
+日志内容:
+%s
+
+时间: %s
+来源: AIPipe 日志监控系统
+`, summary, logLine, time.Now().Format("2006-01-02 15:04:05"))
+
+	var err error
+	if emailConfig.Provider == "resend" {
+		err = sendResendEmail(emailConfig, subject, body)
+	} else {
+		err = sendSMTPEmail(emailConfig, subject, body)
+	}
+
+	if err != nil {
+		if *verbose || *debug {
+			log.Printf("❌ 邮件发送失败: %v", err)
+		}
+	} else {
+		if *verbose || *debug {
+			log.Printf("✅ 邮件已发送: %s", subject)
+		}
+	}
+}
+
+// 通过SMTP发送邮件
+func sendSMTPEmail(config EmailConfig, subject, body string) error {
+	// 构建邮件内容
+	message := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s",
+		config.FromEmail, strings.Join(config.ToEmails, ","), subject, body)
+
+	// 连接SMTP服务器
+	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
+
+	var err error
+	if config.Port == 465 {
+		// SSL连接
+		err = sendMailSSL(addr, auth, config.FromEmail, config.ToEmails, []byte(message))
+	} else {
+		// 普通连接或STARTTLS
+		err = smtp.SendMail(addr, auth, config.FromEmail, config.ToEmails, []byte(message))
+	}
+
+	return err
+}
+
+// SSL邮件发送
+func sendMailSSL(addr string, auth smtp.Auth, from string, to []string, msg []byte) error {
+	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: strings.Split(addr, ":")[0]})
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, strings.Split(addr, ":")[0])
+	if err != nil {
+		return err
+	}
+	defer client.Quit()
+
+	if err = client.Auth(auth); err != nil {
+		return err
+	}
+
+	if err = client.Mail(from); err != nil {
+		return err
+	}
+
+	for _, addr := range to {
+		if err = client.Rcpt(addr); err != nil {
+			return err
+		}
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+
+	_, err = w.Write(msg)
+	return err
+}
+
+// 通过Resend API发送邮件
+func sendResendEmail(config EmailConfig, subject, body string) error {
+	type ResendRequest struct {
+		From    string   `json:"from"`
+		To      []string `json:"to"`
+		Subject string   `json:"subject"`
+		Text    string   `json:"text"`
+	}
+
+	reqBody := ResendRequest{
+		From:    config.FromEmail,
+		To:      config.ToEmails,
+		Subject: subject,
+		Text:    body,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+config.Password)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("resend API error: %s", string(body))
+	}
+
+	return nil
+}
+
+// 发送webhook通知
+func sendWebhookNotification(config WebhookConfig, summary, logLine, webhookType string) {
+	if !config.Enabled || config.URL == "" {
+		return
+	}
+
+	var payload interface{}
+
+	// 根据webhook类型构建不同的payload
+	switch webhookType {
+	case "dingtalk":
+		payload = buildDingTalkPayload(summary, logLine)
+	case "wechat":
+		payload = buildWeChatPayload(summary, logLine)
+	case "feishu":
+		payload = buildFeishuPayload(summary, logLine)
+	case "slack":
+		payload = buildSlackPayload(summary, logLine)
+	default:
+		payload = buildGenericPayload(summary, logLine)
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		if *verbose || *debug {
+			log.Printf("❌ 构建webhook payload失败: %v", err)
+		}
+		return
+	}
+
+	req, err := http.NewRequest("POST", config.URL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		if *verbose || *debug {
+			log.Printf("❌ 创建webhook请求失败: %v", err)
+		}
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// 如果配置了签名密钥，添加签名
+	if config.Secret != "" {
+		addWebhookSignature(req, jsonData, config.Secret, webhookType)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		if *verbose || *debug {
+			log.Printf("❌ 发送webhook失败: %v", err)
+		}
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		if *verbose || *debug {
+			log.Printf("❌ Webhook响应错误 %d: %s", resp.StatusCode, string(body))
+		}
+		return
+	}
+
+	if *verbose || *debug {
+		log.Printf("✅ %s webhook已发送: %s", webhookType, summary)
+	}
+}
+
+// 构建钉钉webhook payload
+func buildDingTalkPayload(summary, logLine string) map[string]interface{} {
+	return map[string]interface{}{
+		"msgtype": "text",
+		"text": map[string]string{
+			"content": fmt.Sprintf("⚠️ 重要日志告警\n\n摘要: %s\n\n日志内容:\n%s\n\n时间: %s",
+				summary, logLine, time.Now().Format("2006-01-02 15:04:05")),
+		},
+	}
+}
+
+// 构建企业微信webhook payload
+func buildWeChatPayload(summary, logLine string) map[string]interface{} {
+	return map[string]interface{}{
+		"msgtype": "text",
+		"text": map[string]string{
+			"content": fmt.Sprintf("⚠️ 重要日志告警\n\n摘要: %s\n\n日志内容:\n%s\n\n时间: %s",
+				summary, logLine, time.Now().Format("2006-01-02 15:04:05")),
+		},
+	}
+}
+
+// 构建飞书webhook payload
+func buildFeishuPayload(summary, logLine string) map[string]interface{} {
+	return map[string]interface{}{
+		"msg_type": "text",
+		"content": map[string]string{
+			"text": fmt.Sprintf("⚠️ 重要日志告警\n\n摘要: %s\n\n日志内容:\n%s\n\n时间: %s",
+				summary, logLine, time.Now().Format("2006-01-02 15:04:05")),
+		},
+	}
+}
+
+// 构建Slack webhook payload
+func buildSlackPayload(summary, logLine string) map[string]interface{} {
+	return map[string]interface{}{
+		"text": fmt.Sprintf("⚠️ 重要日志告警\n\n*摘要:* %s\n\n*日志内容:*\n```\n%s\n```\n\n*时间:* %s",
+			summary, logLine, time.Now().Format("2006-01-02 15:04:05")),
+		"username":   "AIPipe",
+		"icon_emoji": ":warning:",
+	}
+}
+
+// 构建通用webhook payload
+func buildGenericPayload(summary, logLine string) map[string]interface{} {
+	return map[string]interface{}{
+		"summary":   summary,
+		"log_line":  logLine,
+		"timestamp": time.Now().Format("2006-01-02 15:04:05"),
+		"source":    "AIPipe",
+		"level":     "warning",
+	}
+}
+
+// 添加webhook签名
+func addWebhookSignature(req *http.Request, body []byte, secret, webhookType string) {
+	// 这里可以实现不同webhook平台的签名算法
+	// 目前只是占位符实现
+	switch webhookType {
+	case "dingtalk":
+		// 钉钉签名实现
+		// req.Header.Set("X-DingTalk-Signature", signature)
+	case "wechat":
+		// 企业微信签名实现
+		// req.Header.Set("X-WeChat-Signature", signature)
+	case "feishu":
+		// 飞书签名实现
+		// req.Header.Set("X-Feishu-Signature", signature)
+	case "slack":
+		// Slack签名实现
+		// req.Header.Set("X-Slack-Signature", signature)
+	default:
+		// 通用签名
+		// req.Header.Set("X-Webhook-Signature", signature)
+	}
+}
+
+// 智能识别webhook类型
+func detectWebhookType(webhookURL string) string {
+	u, err := url.Parse(webhookURL)
+	if err != nil {
+		return "custom"
+	}
+
+	host := strings.ToLower(u.Host)
+	path := strings.ToLower(u.Path)
+
+	// 钉钉
+	if strings.Contains(host, "dingtalk") || strings.Contains(path, "dingtalk") {
+		return "dingtalk"
+	}
+
+	// 企业微信
+	if strings.Contains(host, "qyapi.weixin.qq.com") || strings.Contains(path, "wechat") {
+		return "wechat"
+	}
+
+	// 飞书
+	if strings.Contains(host, "feishu") || strings.Contains(path, "feishu") {
+		return "feishu"
+	}
+
+	// Slack
+	if strings.Contains(host, "slack.com") || strings.Contains(path, "slack") {
+		return "slack"
+	}
+
+	return "custom"
 }
