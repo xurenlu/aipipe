@@ -173,6 +173,9 @@ var (
 	batchWait        = flag.Duration("batch-wait", BATCH_WAIT_TIME, "批处理等待时间")
 	showNotImportant = flag.Bool("show-not-important", false, "显示被过滤的日志（默认不显示）")
 	contextLines     = flag.Int("context", 3, "重要日志显示的上下文行数（前后各N行）")
+
+	// 全局变量：当前监控的日志文件路径（用于通知）
+	currentLogFile = "stdin"
 )
 
 func main() {
@@ -657,7 +660,7 @@ func processBatch(lines []string) (filtered int, alerted int) {
 					break
 				}
 				if len(line) > 150 {
-					formattedLogs = append(formattedLogs, line[:150] + "...")
+					formattedLogs = append(formattedLogs, line[:150]+"...")
 				} else {
 					formattedLogs = append(formattedLogs, line)
 				}
@@ -713,6 +716,9 @@ func watchFile(path string) error {
 	if err != nil {
 		return fmt.Errorf("获取绝对路径失败: %w", err)
 	}
+	
+	// 设置全局变量，用于通知
+	currentLogFile = absPath
 
 	// 加载上次的状态
 	state := loadFileState(absPath)
@@ -2146,9 +2152,11 @@ func sendEmailNotification(summary, logLine string) {
 日志内容:
 %s
 
+文件: %s
+
 时间: %s
 来源: AIPipe 日志监控系统
-`, summary, logLine, time.Now().Format("2006-01-02 15:04:05"))
+`, summary, logLine, currentLogFile, time.Now().Format("2006-01-02 15:04:05"))
 
 	var err error
 	if emailConfig.Provider == "resend" {
@@ -2342,22 +2350,26 @@ func sendWebhookNotification(config WebhookConfig, summary, logLine, webhookType
 
 // 构建钉钉webhook payload
 func buildDingTalkPayload(summary, logLine string) map[string]interface{} {
+	content := fmt.Sprintf("⚠️ 重要日志告警\n\n📋 摘要: %s\n\n📝 日志内容:\n%s\n\n📁 文件: %s\n\n⏰ 时间: %s",
+		summary, logLine, currentLogFile, time.Now().Format("2006-01-02 15:04:05"))
+	
 	return map[string]interface{}{
 		"msgtype": "text",
 		"text": map[string]string{
-			"content": fmt.Sprintf("⚠️ 重要日志告警\n\n摘要: %s\n\n日志内容:\n%s\n\n时间: %s",
-				summary, logLine, time.Now().Format("2006-01-02 15:04:05")),
+			"content": content,
 		},
 	}
 }
 
 // 构建企业微信webhook payload
 func buildWeChatPayload(summary, logLine string) map[string]interface{} {
+	content := fmt.Sprintf("⚠️ 重要日志告警\n\n📋 摘要: %s\n\n📝 日志内容:\n%s\n\n📁 文件: %s\n\n⏰ 时间: %s",
+		summary, logLine, currentLogFile, time.Now().Format("2006-01-02 15:04:05"))
+	
 	return map[string]interface{}{
 		"msgtype": "text",
 		"text": map[string]string{
-			"content": fmt.Sprintf("⚠️ 重要日志告警\n\n摘要: %s\n\n日志内容:\n%s\n\n时间: %s",
-				summary, logLine, time.Now().Format("2006-01-02 15:04:05")),
+			"content": content,
 		},
 	}
 }
@@ -2365,8 +2377,8 @@ func buildWeChatPayload(summary, logLine string) map[string]interface{} {
 // 构建飞书webhook payload
 func buildFeishuPayload(summary, logLine string) map[string]interface{} {
 	// 构建更详细的飞书通知内容
-	content := fmt.Sprintf("⚠️ 重要日志告警\n\n📋 摘要: %s\n\n📝 日志内容:\n%s\n\n⏰ 时间: %s\n\n🔍 来源: AIPipe 日志监控系统",
-		summary, logLine, time.Now().Format("2006-01-02 15:04:05"))
+	content := fmt.Sprintf("⚠️ 重要日志告警\n\n📋 摘要: %s\n\n📝 日志内容:\n%s\n\n📁 文件: %s\n\n⏰ 时间: %s\n\n🔍 来源: AIPipe 日志监控系统",
+		summary, logLine, currentLogFile, time.Now().Format("2006-01-02 15:04:05"))
 	
 	return map[string]interface{}{
 		"msg_type": "text",
@@ -2378,9 +2390,11 @@ func buildFeishuPayload(summary, logLine string) map[string]interface{} {
 
 // 构建Slack webhook payload
 func buildSlackPayload(summary, logLine string) map[string]interface{} {
+	text := fmt.Sprintf("⚠️ 重要日志告警\n\n*摘要:* %s\n\n*日志内容:*\n```\n%s\n```\n\n*文件:* `%s`\n\n*时间:* %s",
+		summary, logLine, currentLogFile, time.Now().Format("2006-01-02 15:04:05"))
+	
 	return map[string]interface{}{
-		"text": fmt.Sprintf("⚠️ 重要日志告警\n\n*摘要:* %s\n\n*日志内容:*\n```\n%s\n```\n\n*时间:* %s",
-			summary, logLine, time.Now().Format("2006-01-02 15:04:05")),
+		"text":       text,
 		"username":   "AIPipe",
 		"icon_emoji": ":warning:",
 	}
@@ -2391,6 +2405,7 @@ func buildGenericPayload(summary, logLine string) map[string]interface{} {
 	return map[string]interface{}{
 		"summary":   summary,
 		"log_line":  logLine,
+		"log_file":  currentLogFile,
 		"timestamp": time.Now().Format("2006-01-02 15:04:05"),
 		"source":    "AIPipe",
 		"level":     "warning",
