@@ -633,23 +633,37 @@ func processBatch(lines []string) (filtered int, alerted int) {
 			notifySummary = fmt.Sprintf("发现 %d 条重要日志", len(importantLogs))
 		}
 
-		// 构建通知内容（日志简要）
+		// 构建通知内容（提供更详细的上下文）
 		notifyContent := ""
 		if len(importantLogs) == 1 {
+			// 单条日志，显示完整内容
 			notifyContent = importantLogs[0]
-		} else if len(importantLogs) <= 3 {
-			// 截取每行前 50 个字符
-			truncated := make([]string, len(importantLogs))
+		} else if len(importantLogs) <= 5 {
+			// 5条以内，显示所有日志（截断长行）
+			formattedLogs := make([]string, len(importantLogs))
 			for i, line := range importantLogs {
-				if len(line) > 50 {
-					truncated[i] = line[:50] + "..."
+				if len(line) > 200 {
+					formattedLogs[i] = line[:200] + "..."
 				} else {
-					truncated[i] = line
+					formattedLogs[i] = line
 				}
 			}
-			notifyContent = strings.Join(truncated, "\n")
+			notifyContent = strings.Join(formattedLogs, "\n\n")
 		} else {
-			notifyContent = fmt.Sprintf("共 %d 条重要日志需要关注", len(importantLogs))
+			// 超过5条，显示前3条和统计信息
+			formattedLogs := make([]string, 0, 4)
+			for i, line := range importantLogs {
+				if i >= 3 {
+					break
+				}
+				if len(line) > 150 {
+					formattedLogs = append(formattedLogs, line[:150] + "...")
+				} else {
+					formattedLogs = append(formattedLogs, line)
+				}
+			}
+			formattedLogs = append(formattedLogs, fmt.Sprintf("... 还有 %d 条重要日志", len(importantLogs)-3))
+			notifyContent = strings.Join(formattedLogs, "\n\n")
 		}
 
 		// 发送一次通知
@@ -2350,11 +2364,14 @@ func buildWeChatPayload(summary, logLine string) map[string]interface{} {
 
 // 构建飞书webhook payload
 func buildFeishuPayload(summary, logLine string) map[string]interface{} {
+	// 构建更详细的飞书通知内容
+	content := fmt.Sprintf("⚠️ 重要日志告警\n\n📋 摘要: %s\n\n📝 日志内容:\n%s\n\n⏰ 时间: %s\n\n🔍 来源: AIPipe 日志监控系统",
+		summary, logLine, time.Now().Format("2006-01-02 15:04:05"))
+	
 	return map[string]interface{}{
 		"msg_type": "text",
 		"content": map[string]string{
-			"text": fmt.Sprintf("⚠️ 重要日志告警\n\n摘要: %s\n\n日志内容:\n%s\n\n时间: %s",
-				summary, logLine, time.Now().Format("2006-01-02 15:04:05")),
+			"text": content,
 		},
 	}
 }
