@@ -317,10 +317,18 @@ func getAddCmdShort() string {
 	return "Add log monitoring source"
 }
 
+// 翻译函数
+func tr(zh, en string) string {
+	if currentLang == "zh" {
+		return zh
+	}
+	return en
+}
+
 // 删除日志源命令
 var removeCmd = &cobra.Command{
 	Use:   "remove [name]",
-	Short: "删除日志监控源",
+	Short: tr("删除日志监控源", "Remove log monitoring source"),
 	Long: `从配置文件中删除指定的日志监控源。
 
 参数:
@@ -350,7 +358,7 @@ var removeCmd = &cobra.Command{
 // 列出日志源命令
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "列出所有日志监控源",
+	Short: tr("列出所有日志监控源", "List all log monitoring sources"),
 	Long: `显示当前配置文件中所有的日志监控源。
 
 输出信息:
@@ -378,7 +386,7 @@ var listCmd = &cobra.Command{
 // 测试配置文件命令
 var testCmd = &cobra.Command{
 	Use:   "test [config-file]",
-	Short: "测试配置文件",
+	Short: tr("测试配置文件", "Test configuration file"),
 	Long: `测试配置文件的格式和内容是否正确。
 
 参数:
@@ -417,7 +425,7 @@ var testCmd = &cobra.Command{
 // 编辑配置文件命令
 var editCmd = &cobra.Command{
 	Use:   "edit [config-file]",
-	Short: "编辑配置文件",
+	Short: tr("编辑配置文件", "Edit configuration file"),
 	Long: `使用默认编辑器打开配置文件进行编辑。
 
 参数:
