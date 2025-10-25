@@ -1,0 +1,69 @@
+sources:
+  - name: "Java应用日志"
+    type: "file"
+    path: "/var/log/java-app.log"
+    format: "java"
+    enabled: true
+    priority: 1
+    description: "监控Java应用程序日志"
+  
+  - name: "PHP应用日志"
+    type: "file"
+    path: "/var/log/php-app.log"
+    format: "php"
+    enabled: true
+    priority: 2
+    description: "监控PHP应用程序日志"
+  
+  - name: "Nginx错误日志"
+    type: "file"
+    path: "/var/log/nginx/error.log"
+    format: "nginx"
+    enabled: true
+    priority: 3
+    description: "监控Nginx错误日志"
+  
+  - name: "系统服务监控"
+    type: "journalctl"
+    format: "journald"
+    enabled: true
+    priority: 4
+    description: "监控系统服务日志"
+    journal:
+      services: ["nginx", "docker", "postgresql"]
+      priority: "err"
+      since: ""
+      until: ""
+      user: ""
+      boot: false
+      kernel: false
+  
+  - name: "内核消息监控"
+    type: "journalctl"
+    format: "journald"
+    enabled: true
+    priority: 5
+    description: "监控内核关键消息"
+    journal:
+      services: []
+      priority: "crit"
+      since: ""
+      until: ""
+      user: ""
+      boot: false
+      kernel: true
+  
+  - name: "数据库服务监控"
+    type: "journalctl"
+    format: "journald"
+    enabled: true
+    priority: 6
+    description: "监控数据库服务"
+    journal:
+      services: ["postgresql", "mysql", "redis"]
+      priority: "warning"
+      since: ""
+      until: ""
+      user: ""
+      boot: false
+      kernel: false

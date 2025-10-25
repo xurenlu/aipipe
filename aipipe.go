@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"gopkg.in/yaml.v3"
+	"github.com/BurntSushi/toml"
 )
 
 // 邮件配置
@@ -170,14 +172,14 @@ type MultiSourceConfig struct {
 }
 
 type SourceConfig struct {
-	Name        string            `json:"name"`        // 源名称
-	Type        string            `json:"type"`        // 源类型: file, journalctl, stdin
-	Path        string            `json:"path"`       // 文件路径（type=file时）
-	Format      string            `json:"format"`     // 日志格式
-	Journal     *JournalConfig    `json:"journal"`     // journalctl配置（type=journalctl时）
-	Enabled     bool              `json:"enabled"`    // 是否启用
-	Priority    int               `json:"priority"`    // 优先级（数字越小优先级越高）
-	Description string            `json:"description"` // 描述
+	Name        string         `json:"name"`        // 源名称
+	Type        string         `json:"type"`        // 源类型: file, journalctl, stdin
+	Path        string         `json:"path"`        // 文件路径（type=file时）
+	Format      string         `json:"format"`      // 日志格式
+	Journal     *JournalConfig `json:"journal"`     // journalctl配置（type=journalctl时）
+	Enabled     bool           `json:"enabled"`     // 是否启用
+	Priority    int            `json:"priority"`    // 优先级（数字越小优先级越高）
+	Description string         `json:"description"` // 描述
 }
 
 type JournalConfig struct {
@@ -209,10 +211,10 @@ var (
 	journalUser     = flag.String("journal-user", "", "监控特定用户的日志")
 	journalBoot     = flag.Bool("journal-boot", false, "只监控当前启动的日志")
 	journalKernel   = flag.Bool("journal-kernel", false, "只监控内核消息")
-	
+
 	// 多源监控配置
-	multiSource      = flag.String("multi-source", "", "多源监控配置文件路径")
-	configFile       = flag.String("config", "", "指定配置文件路径")
+	multiSource = flag.String("multi-source", "", "多源监控配置文件路径")
+	configFile  = flag.String("config", "", "指定配置文件路径")
 
 	// 全局变量：当前监控的日志文件路径（用于通知）
 	currentLogFile = "stdin"
@@ -274,9 +276,17 @@ func main() {
 	}
 
 	// 加载配置文件
-	if err := loadConfig(); err != nil {
-		log.Printf("⚠️  加载配置文件失败，使用默认配置: %v", err)
-		globalConfig = defaultConfig
+	if *configFile != "" {
+		// 使用指定的配置文件
+		if err := loadConfigWithFormat(*configFile); err != nil {
+			log.Fatalf("❌ 加载指定配置文件失败: %v", err)
+		}
+	} else {
+		// 使用默认配置文件
+		if err := loadConfig(); err != nil {
+			log.Printf("⚠️  加载配置文件失败，使用默认配置: %v", err)
+			globalConfig = defaultConfig
+		}
 	}
 
 	fmt.Printf("🚀 AIPipe 启动 - 监控 %s 格式日志\n", *logFormat)
@@ -558,7 +568,7 @@ func processMultiSource() {
 			fmt.Printf("📡 源: %s (%s) - %s\n", source.Name, source.Type, source.Description)
 		}
 	}
-	
+
 	if enabledSources == 0 {
 		log.Fatalf("❌ 没有启用的监控源")
 	}
@@ -624,7 +634,7 @@ func monitorFileSource(ctx context.Context, source SourceConfig) {
 
 	// 创建日志行合并器
 	merger := NewLogLineMerger(source.Format)
-	
+
 	// 创建批处理器
 	batcher := NewLogBatcher(func(lines []string) {
 		processBatch(lines)
@@ -646,7 +656,7 @@ func monitorJournalSource(ctx context.Context, source SourceConfig) {
 
 	// 创建命令
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	
+
 	// 创建管道
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -662,7 +672,7 @@ func monitorJournalSource(ctx context.Context, source SourceConfig) {
 
 	// 创建日志行合并器
 	merger := NewLogLineMerger(source.Format)
-	
+
 	// 创建批处理器
 	batcher := NewLogBatcher(func(lines []string) {
 		processBatch(lines)
@@ -707,7 +717,7 @@ func monitorJournalSource(ctx context.Context, source SourceConfig) {
 func monitorStdinSource(ctx context.Context, source SourceConfig) {
 	// 创建日志行合并器
 	merger := NewLogLineMerger(source.Format)
-	
+
 	// 创建批处理器
 	batcher := NewLogBatcher(func(lines []string) {
 		processBatch(lines)
@@ -748,7 +758,7 @@ func monitorStdinSource(ctx context.Context, source SourceConfig) {
 // 从配置构建journalctl命令
 func buildJournalctlCommandFromConfig(journal *JournalConfig) []string {
 	args := []string{"journalctl", "-f", "--no-pager"}
-	
+
 	// 添加服务过滤
 	if len(journal.Services) > 0 {
 		for _, service := range journal.Services {
@@ -758,12 +768,12 @@ func buildJournalctlCommandFromConfig(journal *JournalConfig) []string {
 			}
 		}
 	}
-	
+
 	// 添加优先级过滤
 	if journal.Priority != "" {
 		args = append(args, "-p", journal.Priority)
 	}
-	
+
 	// 添加时间范围
 	if journal.Since != "" {
 		args = append(args, "--since", journal.Since)
@@ -771,23 +781,77 @@ func buildJournalctlCommandFromConfig(journal *JournalConfig) []string {
 	if journal.Until != "" {
 		args = append(args, "--until", journal.Until)
 	}
-	
+
 	// 添加用户过滤
 	if journal.User != "" {
 		args = append(args, "_UID="+journal.User)
 	}
-	
+
 	// 添加启动过滤
 	if journal.Boot {
 		args = append(args, "-b")
 	}
-	
+
 	// 添加内核过滤
 	if journal.Kernel {
 		args = append(args, "-k")
 	}
-	
+
 	return args
+}
+
+// 配置文件格式检测
+func detectConfigFormat(filePath string) string {
+	ext := strings.ToLower(filepath.Ext(filePath))
+	switch ext {
+	case ".json":
+		return "json"
+	case ".yaml", ".yml":
+		return "yaml"
+	case ".toml":
+		return "toml"
+	default:
+		// 尝试读取文件内容来检测格式
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return "json" // 默认格式
+		}
+		
+		// 检测JSON格式
+		var jsonTest interface{}
+		if json.Unmarshal(data, &jsonTest) == nil {
+			return "json"
+		}
+		
+		// 检测YAML格式
+		var yamlTest interface{}
+		if yaml.Unmarshal(data, &yamlTest) == nil {
+			return "yaml"
+		}
+		
+		// 检测TOML格式
+		var tomlTest interface{}
+		if _, err := toml.Decode(string(data), &tomlTest); err == nil {
+			return "toml"
+		}
+		
+		return "json" // 默认格式
+	}
+}
+
+// 解析配置文件
+func parseConfigFile(data []byte, format string, target interface{}) error {
+	switch format {
+	case "json":
+		return json.Unmarshal(data, target)
+	case "yaml":
+		return yaml.Unmarshal(data, target)
+	case "toml":
+		_, err := toml.Decode(string(data), target)
+		return err
+	default:
+		return fmt.Errorf("不支持的配置文件格式: %s", format)
+	}
 }
 
 // 加载多源配置文件
@@ -797,12 +861,38 @@ func loadMultiSourceConfig(configPath string) (*MultiSourceConfig, error) {
 		return nil, fmt.Errorf("读取配置文件失败: %v", err)
 	}
 
+	// 自动检测配置文件格式
+	format := detectConfigFormat(configPath)
+	if *verbose {
+		log.Printf("🔍 检测到配置文件格式: %s", format)
+	}
+
 	var config MultiSourceConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("解析配置文件失败: %v", err)
+	if err := parseConfigFile(data, format, &config); err != nil {
+		return nil, fmt.Errorf("解析配置文件失败 (%s格式): %v", format, err)
 	}
 
 	return &config, nil
+}
+
+// 加载主配置文件（支持多种格式）
+func loadConfigWithFormat(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("读取配置文件失败: %v", err)
+	}
+
+	// 自动检测配置文件格式
+	format := detectConfigFormat(configPath)
+	if *verbose {
+		log.Printf("🔍 检测到主配置文件格式: %s", format)
+	}
+
+	if err := parseConfigFile(data, format, &globalConfig); err != nil {
+		return fmt.Errorf("解析配置文件失败 (%s格式): %v", format, err)
+	}
+
+	return nil
 }
 
 // 带上下文的文件监控

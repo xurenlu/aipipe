@@ -217,6 +217,30 @@ AIPipe 支持同时监控多个日志源，包括文件、journalctl 和标准�
 - ✅ **独立格式** - 每个源可以使用不同的日志格式
 - ✅ **灵活配置** - 支持启用/禁用特定源
 - ✅ **统一处理** - 所有源共享AI分析和通知配置
+- ✅ **多格式支持** - 支持JSON、YAML、TOML配置文件格式
+
+#### 配置文件格式示例
+
+**JSON格式 (默认):**
+```bash
+./aipipe --multi-source config.json
+```
+
+**YAML格式:**
+```bash
+./aipipe --multi-source config.yaml
+```
+
+**TOML格式:**
+```bash
+./aipipe --multi-source config.toml
+```
+
+**自动检测格式:**
+```bash
+# AIPipe会自动检测文件格式
+./aipipe --multi-source config  # 无扩展名，自动检测
+```
 
 ### 监控系统日志 (journalctl)
 
@@ -399,6 +423,15 @@ AIPipe 支持直接监控 Linux 系统日志，无需手动使用 `journalctl -f
 - `--multi-source` - 多源监控配置文件路径
 - `--config` - 指定主配置文件路径（可选）
 
+### 配置文件格式支持
+
+AIPipe 支持多种配置文件格式，自动检测和解析：
+
+- ✅ **JSON** - 默认格式，支持 `.json` 扩展名
+- ✅ **YAML** - 支持 `.yaml` 和 `.yml` 扩展名
+- ✅ **TOML** - 支持 `.toml` 扩展名
+- ✅ **自动检测** - 根据文件扩展名和内容自动识别格式
+
 ## 🔧 配置
 
 ### 配置文件格式
@@ -549,6 +582,53 @@ AIPipe 支持直接监控 Linux 系统日志，无需手动使用 `journalctl -f
     }
   }
 }
+```
+
+#### 6. YAML格式配置
+
+```yaml
+ai_endpoint: "https://api.openai.com/v1/chat/completions"
+token: "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+model: "gpt-4"
+custom_prompt: "请特别注意数据库连接、内存泄漏、安全相关日志"
+
+notifiers:
+  email:
+    enabled: true
+    provider: "smtp"
+    host: "smtp.gmail.com"
+    port: 587
+    username: "alerts@company.com"
+    password: "your-app-password"
+    from_email: "alerts@company.com"
+    to_emails: ["admin@company.com", "devops@company.com"]
+  
+  dingtalk:
+    enabled: true
+    url: "https://oapi.dingtalk.com/robot/send?access_token=xxxxxxxx"
+```
+
+#### 7. TOML格式配置
+
+```toml
+ai_endpoint = "https://api.openai.com/v1/chat/completions"
+token = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+model = "gpt-4"
+custom_prompt = "请特别注意数据库连接、内存泄漏、安全相关日志"
+
+[notifiers.email]
+enabled = true
+provider = "smtp"
+host = "smtp.gmail.com"
+port = 587
+username = "alerts@company.com"
+password = "your-app-password"
+from_email = "alerts@company.com"
+to_emails = ["admin@company.com", "devops@company.com"]
+
+[notifiers.dingtalk]
+enabled = true
+url = "https://oapi.dingtalk.com/robot/send?access_token=xxxxxxxx"
 ```
 
 ### 通知配置

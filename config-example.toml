@@ -1,0 +1,35 @@
+ai_endpoint = "https://api.openai.com/v1/chat/completions"
+token = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+model = "gpt-4"
+custom_prompt = "请特别注意数据库连接、内存泄漏、安全相关日志"
+
+[notifiers.email]
+enabled = true
+provider = "smtp"
+host = "smtp.gmail.com"
+port = 587
+username = "alerts@company.com"
+password = "your-app-password"
+from_email = "alerts@company.com"
+to_emails = ["admin@company.com", "devops@company.com"]
+
+[notifiers.dingtalk]
+enabled = true
+url = "https://oapi.dingtalk.com/robot/send?access_token=xxxxxxxx"
+
+[notifiers.wechat]
+enabled = true
+url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxxxxxx"
+
+[notifiers.feishu]
+enabled = true
+url = "https://open.feishu.cn/open-apis/bot/v2/hook/xxxxxxxx"
+
+[notifiers.slack]
+enabled = true
+url = "https://hooks.slack.com/services/xxxxxxxx/xxxxxxxx/xxxxxxxx"
+
+[[notifiers.custom_webhooks]]
+enabled = true
+url = "https://your-custom-webhook.com/endpoint"
+secret = "your-webhook-secret"
