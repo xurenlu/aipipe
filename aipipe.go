@@ -717,7 +717,7 @@ func watchFile(path string) error {
 	if err != nil {
 		return fmt.Errorf("获取绝对路径失败: %w", err)
 	}
-	
+
 	// 设置全局变量，用于通知
 	currentLogFile = absPath
 
@@ -2145,17 +2145,17 @@ func safeSendEmailNotification(summary, logLine string) {
 			}
 		}
 	}()
-	
+
 	// 使用context控制超时
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	// 使用channel控制并发
 	done := make(chan error, 1)
 	go func() {
 		done <- sendEmailNotificationWithContext(ctx, summary, logLine)
 	}()
-	
+
 	select {
 	case err := <-done:
 		if err != nil && (*verbose || *debug) {
@@ -2201,7 +2201,7 @@ func sendEmailNotificationWithContext(ctx context.Context, summary, logLine stri
 	if err != nil {
 		return fmt.Errorf("邮件发送失败: %w", err)
 	}
-	
+
 	if *verbose || *debug {
 		log.Printf("✅ 邮件已发送: %s", subject)
 	}
@@ -2226,60 +2226,60 @@ func sendSMTPEmailWithContext(ctx context.Context, config EmailConfig, subject, 
 		return ctx.Err()
 	default:
 	}
-	
+
 	// 构建邮件内容
 	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s",
 		config.FromEmail, strings.Join(config.ToEmails, ","), subject, body)
-	
+
 	// 构建SMTP地址
 	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
-	
+
 	// 创建TLS配置
 	tlsConfig := &tls.Config{
 		ServerName: config.Host,
 	}
-	
+
 	// 建立连接
 	conn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
 		return fmt.Errorf("TLS连接失败: %w", err)
 	}
 	defer conn.Close()
-	
+
 	// 创建SMTP客户端
 	client, err := smtp.NewClient(conn, config.Host)
 	if err != nil {
 		return fmt.Errorf("创建SMTP客户端失败: %w", err)
 	}
 	defer client.Quit()
-	
+
 	// 认证
 	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
 	if err := client.Auth(auth); err != nil {
 		return fmt.Errorf("SMTP认证失败: %w", err)
 	}
-	
+
 	// 发送邮件
 	if err := client.Mail(config.FromEmail); err != nil {
 		return fmt.Errorf("设置发件人失败: %w", err)
 	}
-	
+
 	for _, to := range config.ToEmails {
 		if err := client.Rcpt(to); err != nil {
 			return fmt.Errorf("设置收件人失败: %w", err)
 		}
 	}
-	
+
 	writer, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("获取数据写入器失败: %w", err)
 	}
 	defer writer.Close()
-	
+
 	if _, err := writer.Write([]byte(msg)); err != nil {
 		return fmt.Errorf("写入邮件内容失败: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -2291,7 +2291,7 @@ func sendResendEmailWithContext(ctx context.Context, config EmailConfig, subject
 		return ctx.Err()
 	default:
 	}
-	
+
 	// 构建请求
 	payload := map[string]interface{}{
 		"from":    config.FromEmail,
@@ -2299,32 +2299,32 @@ func sendResendEmailWithContext(ctx context.Context, config EmailConfig, subject
 		"subject": subject,
 		"html":    body,
 	}
-	
+
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("序列化请求失败: %w", err)
 	}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.resend.com/emails", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("创建请求失败: %w", err)
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+config.Password) // 使用password字段存储API key
-	
+
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("发送请求失败: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("Resend API错误 %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("resend API错误 %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	return nil
 }
 
@@ -2338,55 +2338,13 @@ func sendSMTPEmail(config EmailConfig, subject, body string) error {
 	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
 	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
 
-	var err error
-	if config.Port == 465 {
-		// SSL连接
-		err = sendMailSSL(addr, auth, config.FromEmail, config.ToEmails, []byte(message))
-	} else {
-		// 普通连接或STARTTLS
-		err = smtp.SendMail(addr, auth, config.FromEmail, config.ToEmails, []byte(message))
-	}
+	// 使用统一的SMTP发送方式
+	err := smtp.SendMail(addr, auth, config.FromEmail, config.ToEmails, []byte(message))
 
 	return err
 }
 
 // SSL邮件发送
-func sendMailSSL(addr string, auth smtp.Auth, from string, to []string, msg []byte) error {
-	conn, err := tls.Dial("tcp", addr, &tls.Config{ServerName: strings.Split(addr, ":")[0]})
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	client, err := smtp.NewClient(conn, strings.Split(addr, ":")[0])
-	if err != nil {
-		return err
-	}
-	defer client.Quit()
-
-	if err = client.Auth(auth); err != nil {
-		return err
-	}
-
-	if err = client.Mail(from); err != nil {
-		return err
-	}
-
-	for _, addr := range to {
-		if err = client.Rcpt(addr); err != nil {
-			return err
-		}
-	}
-
-	w, err := client.Data()
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-
-	_, err = w.Write(msg)
-	return err
-}
 
 // 通过Resend API发送邮件
 func sendResendEmail(config EmailConfig, subject, body string) error {
@@ -2441,17 +2399,17 @@ func safeSendWebhookNotification(config WebhookConfig, summary, logLine, webhook
 			}
 		}
 	}()
-	
+
 	// 使用context控制超时
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	
+
 	// 使用channel控制并发
 	done := make(chan error, 1)
 	go func() {
 		done <- sendWebhookNotificationWithContext(ctx, config, summary, logLine, webhookType)
 	}()
-	
+
 	select {
 	case err := <-done:
 		if err != nil && (*verbose || *debug) {
@@ -2535,7 +2493,7 @@ func sendWebhookNotification(config WebhookConfig, summary, logLine, webhookType
 func buildDingTalkPayload(summary, logLine string) map[string]interface{} {
 	content := fmt.Sprintf("⚠️ 重要日志告警\n\n📋 摘要: %s\n\n📝 日志内容:\n%s\n\n📁 文件: %s\n\n⏰ 时间: %s",
 		summary, logLine, currentLogFile, time.Now().Format("2006-01-02 15:04:05"))
-	
+
 	return map[string]interface{}{
 		"msgtype": "text",
 		"text": map[string]string{
@@ -2548,7 +2506,7 @@ func buildDingTalkPayload(summary, logLine string) map[string]interface{} {
 func buildWeChatPayload(summary, logLine string) map[string]interface{} {
 	content := fmt.Sprintf("⚠️ 重要日志告警\n\n📋 摘要: %s\n\n📝 日志内容:\n%s\n\n📁 文件: %s\n\n⏰ 时间: %s",
 		summary, logLine, currentLogFile, time.Now().Format("2006-01-02 15:04:05"))
-	
+
 	return map[string]interface{}{
 		"msgtype": "text",
 		"text": map[string]string{
@@ -2562,7 +2520,7 @@ func buildFeishuPayload(summary, logLine string) map[string]interface{} {
 	// 构建更详细的飞书通知内容
 	content := fmt.Sprintf("⚠️ 重要日志告警\n\n📋 摘要: %s\n\n📝 日志内容:\n%s\n\n📁 文件: %s\n\n⏰ 时间: %s\n\n🔍 来源: AIPipe 日志监控系统",
 		summary, logLine, currentLogFile, time.Now().Format("2006-01-02 15:04:05"))
-	
+
 	return map[string]interface{}{
 		"msg_type": "text",
 		"content": map[string]string{
@@ -2575,7 +2533,7 @@ func buildFeishuPayload(summary, logLine string) map[string]interface{} {
 func buildSlackPayload(summary, logLine string) map[string]interface{} {
 	text := fmt.Sprintf("⚠️ 重要日志告警\n\n*摘要:* %s\n\n*日志内容:*\n```\n%s\n```\n\n*文件:* `%s`\n\n*时间:* %s",
 		summary, logLine, currentLogFile, time.Now().Format("2006-01-02 15:04:05"))
-	
+
 	return map[string]interface{}{
 		"text":       text,
 		"username":   "AIPipe",
