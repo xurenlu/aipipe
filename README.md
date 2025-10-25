@@ -39,13 +39,34 @@ AIPipe 支持零配置启动，自动检测配置文件：
 # 1. 下载并运行
 curl -fsSL https://raw.githubusercontent.com/xurenlu/aipipe/main/install.sh | bash
 
-# 2. 创建配置文件（可选）
-mkdir -p ~/.config
-cp aipipe.yaml ~/.config/
-cp aipipe-sources.yaml ~/.config/
+# 2. 使用子命令快速添加日志源（推荐）
+./aipipe config add "Java应用" file "/var/log/java.log" java
+./aipipe config add "系统服务" journalctl "nginx,docker" journald
 
 # 3. 直接启动（自动检测配置）
 ./aipipe
+```
+
+### 子命令快速管理（推荐）
+
+使用子命令管理配置更简单高效：
+
+```bash
+# 添加日志源
+./aipipe config add "Web服务器" file "/var/log/nginx/access.log" nginx
+./aipipe config add "数据库" file "/var/log/postgresql.log" postgresql
+
+# 查看所有配置的日志源
+./aipipe config list
+
+# 测试配置文件
+./aipipe config test
+
+# 删除不需要的日志源
+./aipipe config remove "旧服务"
+
+# 编辑配置文件
+./aipipe config edit
 ```
 
 ### 安装
@@ -239,6 +260,45 @@ AIPipe 支持同时监控多个日志源，包括文件、journalctl 和标准�
 - ✅ **灵活配置** - 支持启用/禁用特定源
 - ✅ **统一处理** - 所有源共享AI分析和通知配置
 - ✅ **多格式支持** - 支持JSON、YAML、TOML配置文件格式
+
+#### 使用子命令管理（推荐）
+
+**添加多个日志源：**
+```bash
+# 添加文件日志源
+./aipipe config add "Web服务器" file "/var/log/nginx/access.log" nginx
+./aipipe config add "数据库" file "/var/log/postgresql.log" postgresql
+./aipipe config add "应用日志" file "/var/log/app.log" java
+
+# 添加journalctl日志源
+./aipipe config add "系统服务" journalctl "nginx,docker,postgresql" journald
+./aipipe config add "Redis" journalctl "redis" journald
+
+# 查看所有配置的日志源
+./aipipe config list
+```
+
+**测试和编辑配置：**
+```bash
+# 测试配置文件格式和内容
+./aipipe config test
+
+# 编辑配置文件（使用默认编辑器）
+./aipipe config edit
+
+# 使用特定编辑器
+export EDITOR=nano
+./aipipe config edit
+```
+
+**删除和更新日志源：**
+```bash
+# 删除不需要的日志源
+./aipipe config remove "旧服务"
+
+# 重新添加更新的日志源
+./aipipe config add "新服务" file "/var/log/new.log" java
+```
 
 #### 配置文件格式示例
 
@@ -549,6 +609,16 @@ AIPipe 提供了丰富的子命令来管理配置文件和日志源：
 ```bash
 ./aipipe config edit
 ./aipipe config edit ~/.config/aipipe.yaml
+```
+
+**注意：** 编辑器使用优先级：
+1. 环境变量 `EDITOR` 指定的编辑器
+2. 默认使用 `vim` 编辑器
+
+可以通过设置环境变量来使用其他编辑器：
+```bash
+export EDITOR=nano  # 使用nano编辑器
+export EDITOR=code  # 使用VS Code编辑器
 ```
 
 ### 配置文件格式支持
@@ -1030,9 +1100,12 @@ aipipe-project/
 
 - **语言**: Go 1.21+
 - **AI**: 可配置的 AI 服务（支持 OpenAI、Azure OpenAI 等）
+- **命令行框架**: Cobra - 强大的CLI应用框架
+- **配置管理**: Viper - 多格式配置文件支持
 - **文件监控**: fsnotify
 - **系统通知**: macOS osascript
 - **音频播放**: afplay
+- **配置解析**: 支持 JSON/YAML/TOML 多种格式
 
 ## 🎯 性能特性
 
