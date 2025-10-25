@@ -21,7 +21,32 @@ var rootCmd = &cobra.Command{
 过滤不重要的日志，并对重要事件发送通知。
 
 支持多种日志格式：Java、PHP、Nginx、Ruby、Python、FastAPI、journald、syslog等。
-支持多源监控：同时监控多个日志文件、journalctl、标准输入等。`,
+支持多源监控：同时监控多个日志文件、journalctl、标准输入等。
+
+快速开始：
+  1. 添加日志源：
+     aipipe config add "应用名称" file "/var/log/app.log" java
+  
+  2. 启动监控：
+     aipipe
+  
+  3. 查看配置：
+     aipipe config list
+
+常用命令：
+  aipipe config add      - 添加日志监控源
+  aipipe config list    - 列出所有日志源
+  aipipe config test    - 测试配置文件
+  aipipe config edit    - 编辑配置文件
+  aipipe config remove  - 删除日志源
+
+更多帮助：
+  aipipe config --help  - 查看配置管理命令详情
+  aipipe --verbose      - 显示详细输出
+  aipipe --debug        - 调试模式
+
+文档：
+  https://github.com/xurenlu/aipipe/blob/main/README.md`,
 	Run: runMain,
 }
 
@@ -29,7 +54,42 @@ var rootCmd = &cobra.Command{
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "配置文件管理",
-	Long:  "管理AIPipe的配置文件，包括创建、编辑、测试等功能",
+	Long: `管理AIPipe的配置文件，包括创建、编辑、测试等功能。
+
+配置文件位置：
+  - 主配置: ~/.config/aipipe.{json,yaml,toml}
+  - 多源配置: ~/.config/aipipe-sources.{json,yaml,toml}
+
+支持的操作：
+  add      - 添加日志监控源
+  list     - 列出所有日志源
+  remove   - 删除日志源
+  test     - 测试配置文件
+  edit     - 编辑配置文件
+
+配置文件格式：
+  - JSON: 自动检测 .json 文件
+  - YAML: 自动检测 .yaml 或 .yml 文件
+  - TOML: 自动检测 .toml 文件
+
+示例：
+  # 添加文件日志源
+  aipipe config add "Java应用" file "/var/log/java.log" java
+  
+  # 添加journalctl日志源
+  aipipe config add "系统服务" journalctl "nginx,docker" journald
+  
+  # 列出所有日志源
+  aipipe config list
+  
+  # 测试配置文件
+  aipipe config test
+  
+  # 编辑配置文件
+  aipipe config edit
+  
+  # 删除日志源
+  aipipe config remove "旧服务"`,
 }
 
 // 添加日志源命令
@@ -44,10 +104,39 @@ var addCmd = &cobra.Command{
   path    文件路径或journalctl参数
   format  日志格式 (java, php, nginx, journald等)
 
+源类型说明:
+  file        - 监控日志文件
+  journalctl  - 监控系统日志（systemd journal）
+  stdin       - 监控标准输入流
+
+支持的日志格式:
+  java, php, nginx, ruby, python, fastapi, go, rust, nodejs, 
+  typescript, docker, kubernetes, postgresql, mysql, redis,
+  elasticsearch, git, jenkins, github, journald, syslog
+
 示例:
+  # 添加Java应用日志
   aipipe config add "Java应用" file "/var/log/java.log" java
-  aipipe config add "系统服务" journalctl "nginx,docker" journald
-  aipipe config add "PHP应用" file "/var/log/php.log" php`,
+  
+  # 添加PHP应用日志
+  aipipe config add "PHP应用" file "/var/log/php.log" php
+  
+  # 添加Nginx访问日志
+  aipipe config add "Nginx访问" file "/var/log/nginx/access.log" nginx
+  
+  # 添加系统服务监控（journalctl）
+  aipipe config add "系统服务" journalctl "nginx,docker,postgresql" journald
+  
+  # 添加数据库服务监控
+  aipipe config add "数据库" journalctl "postgresql,mysql" journald
+  
+  # 添加Docker日志
+  aipipe config add redis "Docker容器" file "/var/log/docker.log" docker
+
+注意事项:
+  - 源名称是唯一的，不能重复
+  - 文件路径必须存在或将要存在
+  - journalctl类型需要root权限`,
 	Args: cobra.ExactArgs(4),
 	Run:  runAddSource,
 }
@@ -59,10 +148,25 @@ var removeCmd = &cobra.Command{
 	Long: `从配置文件中删除指定的日志监控源。
 
 参数:
-  name    要删除的源名称
+  name    要删除的源名称（必须完全匹配）
+
+操作说明:
+  - 会永久删除配置中的日志源
+  - 删除前建议使用 'list' 命令查看源名称
+  - 删除操作不可恢复
 
 示例:
-  aipipe config remove "Java应用日志"`,
+  # 查看所有日志源
+  aipipe config list
+  
+  # 删除指定的日志源
+  aipipe config remove "Java应用日志"
+  aipipe config remove "系统服务监控"
+  aipipe config remove "旧服务"
+
+注意事项:
+  - 源名称必须与配置中的完全一致
+  - 删除后需要重新运行监控程序才能生效`,
 	Args: cobra.ExactArgs(1),
 	Run:  runRemoveSource,
 }
@@ -71,7 +175,27 @@ var removeCmd = &cobra.Command{
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "列出所有日志监控源",
-	Long:  "显示当前配置文件中所有的日志监控源",
+	Long: `显示当前配置文件中所有的日志监控源。
+
+输出信息:
+  - 源名称和类型
+  - 文件路径或服务列表
+  - 日志格式
+  - 启用状态
+  - 优先级
+
+示例:
+  # 列出所有日志源
+  aipipe config list
+  
+  # 输出示例:
+  # 📋 日志监控源列表:
+  # 1. Java应用日志 (file) - ✅ 启用
+  #    路径: /var/log/java.log
+  #    格式: java
+  #    描述: 监控Java应用程序日志
+  # 2. 系统服务监控 (journalctl) - ✅ 启用
+  #    服务: nginx, docker, postgresql`,
 	Run:   runListSources,
 }
 
@@ -84,9 +208,32 @@ var testCmd = &cobra.Command{
 参数:
   config-file  配置文件路径 (可选，默认自动检测)
 
+功能:
+  - 检测配置文件格式 (JSON/YAML/TOML)
+  - 验证配置文件语法
+  - 解析并显示配置内容
+  - 检查必要字段是否存在
+
 示例:
+  # 测试默认配置文件
   aipipe config test
-  aipipe config test ~/.config/aipipe.yaml`,
+  
+  # 测试指定配置文件
+  aipipe config test ~/.config/aipipe.yaml
+  aipipe config test ~/.config/aipipe.json
+  aipipe config test ~/.config/aipipe.toml
+  
+  # 输出示例:
+  # 🔍 测试配置文件: /Users/user/.config/aipipe.json
+  # 📄 检测到格式: json
+  # ✅ 主配置解析成功
+  #    AI端点: https://api.openai.com/v1/chat/completions
+  #    模型: gpt-4
+
+常见问题:
+  - 如果配置文件格式错误，会显示具体错误信息
+  - 如果文件不存在，会提示创建默认配置
+  - 如果必要字段缺失，会提示使用默认值`,
 	Args: cobra.MaximumNArgs(1),
 	Run:  runTestConfig,
 }
@@ -100,9 +247,32 @@ var editCmd = &cobra.Command{
 参数:
   config-file  配置文件路径 (可选，默认自动检测)
 
+编辑器选择:
+  1. 优先使用环境变量 EDITOR 指定的编辑器
+  2. 默认使用 vim 编辑器
+
+设置编辑器:
+  export EDITOR=nano      # 使用nano编辑器
+  export EDITOR=code      # 使用VS Code编辑器
+  export EDITOR=vim       # 使用vim编辑器
+  export EDITOR=emacs     # 使用emacs编辑器
+
 示例:
+  # 编辑默认配置文件
   aipipe config edit
-  aipipe config edit ~/.config/aipipe.yaml`,
+  
+  # 编辑指定配置文件
+  aipipe config edit ~/.config/aipipe.yaml
+  aipipe config edit ~/.config/aipipe.json
+  
+  # 使用特定编辑器
+  export EDITOR=nano
+  aipipe config edit
+
+保存配置:
+  - 编辑完成后保存并退出编辑器
+  - 建议使用 'test' 命令验证配置正确性
+  - 配置修改后需要重启监控程序才能生效`,
 	Args: cobra.MaximumNArgs(1),
 	Run:  runEditConfig,
 }
