@@ -24,8 +24,27 @@ AIPipe 是一个智能日志过滤和监控工具，使用可配置的 AI 服务
 - 🌐 **智能识别** - 自动识别 webhook 类型，支持自定义 webhook
 - 📰 **系统日志监控** - 直接支持 journalctl，无需手动管道操作
 - 🎯 **精确过滤** - 支持服务、级别、时间范围等多维度过滤
+- 🔍 **自动检测** - 自动检测多种格式的配置文件，零配置启动
+- 🚀 **智能启动** - 自动识别单源/多源监控模式
 
 ## 🚀 快速开始
+
+### 零配置启动（推荐）
+
+AIPipe 支持零配置启动，自动检测配置文件：
+
+```bash
+# 1. 下载并运行
+curl -fsSL https://raw.githubusercontent.com/xurenlu/aipipe/main/install.sh | bash
+
+# 2. 创建配置文件（可选）
+mkdir -p ~/.config
+cp aipipe.yaml ~/.config/
+cp aipipe-sources.yaml ~/.config/
+
+# 3. 直接启动（自动检测配置）
+./aipipe
+```
 
 ### 安装
 
@@ -240,6 +259,70 @@ AIPipe 支持同时监控多个日志源，包括文件、journalctl 和标准�
 ```bash
 # AIPipe会自动检测文件格式
 ./aipipe --multi-source config  # 无扩展名，自动检测
+```
+
+### 零配置启动示例
+
+AIPipe 支持零配置启动，自动检测配置文件：
+
+```bash
+# 1. 创建配置文件
+mkdir -p ~/.config
+
+# 2. 创建主配置文件
+cat > ~/.config/aipipe.yaml << EOF
+ai_endpoint: "https://api.openai.com/v1/chat/completions"
+token: "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+model: "gpt-4"
+custom_prompt: "请特别注意数据库连接、内存泄漏、安全相关日志"
+
+notifiers:
+  email:
+    enabled: true
+    provider: "smtp"
+    host: "smtp.gmail.com"
+    port: 587
+    username: "alerts@company.com"
+    password: "your-app-password"
+    from_email: "alerts@company.com"
+    to_emails: ["admin@company.com"]
+EOF
+
+# 3. 创建多源配置文件
+cat > ~/.config/aipipe-sources.yaml << EOF
+sources:
+  - name: "Java应用日志"
+    type: "file"
+    path: "/var/log/java-app.log"
+    format: "java"
+    enabled: true
+    priority: 1
+    description: "监控Java应用程序日志"
+  
+  - name: "系统服务监控"
+    type: "journalctl"
+    format: "journald"
+    enabled: true
+    priority: 2
+    description: "监控系统服务日志"
+    journal:
+      services: ["nginx", "docker", "postgresql"]
+      priority: "err"
+EOF
+
+# 4. 直接启动（自动检测配置）
+./aipipe
+
+# 输出示例：
+# 🔍 找到默认配置文件: /home/user/.config/aipipe.yaml
+# 🔍 检测到主配置文件格式: yaml
+# 🔍 自动检测到多源配置文件: /home/user/.config/aipipe-sources.yaml
+# 🔍 检测到配置文件格式: yaml
+# 🚀 AIPipe 多源监控启动 - 监控 2 个源
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 📡 源: Java应用日志 (file) - 监控Java应用程序日志
+# 📡 源: 系统服务监控 (journalctl) - 监控系统服务日志
+# ✅ 启用 2 个监控源
 ```
 
 ### 监控系统日志 (journalctl)
