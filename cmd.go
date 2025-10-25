@@ -23,12 +23,12 @@ func detectLanguage() string {
 	if lang == "" {
 		lang = os.Getenv("LC_MESSAGES")
 	}
-	
+
 	// 检查是否包含中文标识
 	if strings.Contains(lang, "zh_CN") || strings.Contains(lang, "zh_TW") || strings.Contains(lang, "zh_HK") {
 		return "zh"
 	}
-	
+
 	// 默认英文
 	return "en"
 }
@@ -119,11 +119,10 @@ func getRootCmdShort() string {
 	return "Intelligent log monitoring tool"
 }
 
-// 配置文件管理命令
-var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "配置文件管理",
-	Long: `管理AIPipe的配置文件，包括创建、编辑、测试等功能。
+// 获取配置命令描述
+func getConfigCmdDescription() string {
+	if currentLang == "zh" {
+		return `管理AIPipe的配置文件，包括创建、编辑、测试等功能。
 
 配置文件位置：
   - 主配置: ~/.config/aipipe.{json,yaml,toml}
@@ -158,14 +157,65 @@ var configCmd = &cobra.Command{
   aipipe config edit
   
   # 删除日志源
-  aipipe config remove "旧服务"`,
+  aipipe config remove "旧服务"`
+	}
+	return `Manage AIPipe configuration files, including create, edit, test, etc.
+
+Configuration Files:
+  - Main config: ~/.config/aipipe.{json,yaml,toml}
+  - Multi-source config: ~/.config/aipipe-sources.{json,yaml,toml}
+
+Available Operations:
+  add      - Add log monitoring source
+  list     - List all log sources
+  remove   - Remove log source
+  test     - Test configuration file
+  edit     - Edit configuration file
+
+Configuration Formats:
+  - JSON: Auto-detect .json files
+  - YAML: Auto-detect .yaml or .yml files
+  - TOML: Auto-detect .toml files
+
+Examples:
+  # Add file log source
+  aipipe config add "Java App" file "/var/log/java.log" java
+  
+  # Add journalctl log source
+  aipipe config add "System Services" journalctl "nginx,docker" journald
+  
+  # List all log sources
+  aipipe config list
+  
+  # Test configuration file
+  aipipe config test
+  
+  # Edit configuration file
+  aipipe config edit
+  
+  # Remove log source
+  aipipe config remove "Old Service"`
 }
 
-// 添加日志源命令
-var addCmd = &cobra.Command{
-	Use:   "add [name] [type] [path] [format]",
-	Short: "添加日志监控源",
-	Long: `添加新的日志监控源到配置文件中。
+// 配置文件管理命令
+var configCmd = &cobra.Command{
+	Use:   "config",
+	Short: getConfigCmdShort(),
+	Long:  getConfigCmdDescription(),
+}
+
+// 获取配置命令简短描述
+func getConfigCmdShort() string {
+	if currentLang == "zh" {
+		return "配置文件管理"
+	}
+	return "Configuration file management"
+}
+
+// 获取添加命令描述
+func getAddCmdDescription() string {
+	if currentLang == "zh" {
+		return `添加新的日志监控源到配置文件中。
 
 参数:
   name    源名称 (如: "Java应用日志")
@@ -200,14 +250,71 @@ var addCmd = &cobra.Command{
   aipipe config add "数据库" journalctl "postgresql,mysql" journald
   
   # 添加Docker日志
-  aipipe config add redis "Docker容器" file "/var/log/docker.log" docker
+  aipipe config add "Docker容器" file "/var/log/docker.log" docker
 
 注意事项:
   - 源名称是唯一的，不能重复
   - 文件路径必须存在或将要存在
-  - journalctl类型需要root权限`,
-	Args: cobra.ExactArgs(4),
-	Run:  runAddSource,
+  - journalctl类型需要root权限`
+	}
+	return `Add a new log monitoring source to the configuration file.
+
+Arguments:
+  name    Source name (e.g., "Java App Logs")
+  type    Source type (file, journalctl, stdin)
+  path    File path or journalctl parameters
+  format  Log format (java, php, nginx, journald, etc.)
+
+Source Types:
+  file        - Monitor log files
+  journalctl  - Monitor system logs (systemd journal)
+  stdin       - Monitor standard input stream
+
+Supported Log Formats:
+  java, php, nginx, ruby, python, fastapi, go, rust, nodejs, 
+  typescript, docker, kubernetes, postgresql, mysql, redis,
+  elasticsearch, git, jenkins, github, journald, syslog
+
+Examples:
+  # Add Java application logs
+  aipipe config add "Java App" file "/var/log/java.log" java
+  
+  # Add PHP application logs
+  aipipe config add "PHP App" file "/var/log/php.log" php
+  
+  # Add Nginx access logs
+  aipipe config add "Nginx Access" file "/var/log/nginx/access.log" nginx
+  
+  # Add system service monitoring (journalctl)
+  aipipe config add "System Services" journalctl "nginx,docker,postgresql" journald
+  
+  # Add database service monitoring
+  aipipe config add "Database" journalctl "postgresql,mysql" journald
+  
+  # Add Docker logs
+  aipipe config add "Docker Containers" file "/var/log/docker.log" docker
+
+Notes:
+  - Source name must be unique
+  - File path must exist or will exist
+  - journalctl type requires root privileges`
+}
+
+// 添加日志源命令
+var addCmd = &cobra.Command{
+	Use:   "add [name] [type] [path] [format]",
+	Short: getAddCmdShort(),
+	Long:  getAddCmdDescription(),
+	Args:  cobra.ExactArgs(4),
+	Run:   runAddSource,
+}
+
+// 获取添加命令简短描述
+func getAddCmdShort() string {
+	if currentLang == "zh" {
+		return "添加日志监控源"
+	}
+	return "Add log monitoring source"
 }
 
 // 删除日志源命令
