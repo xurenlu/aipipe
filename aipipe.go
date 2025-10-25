@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
@@ -1714,27 +1715,27 @@ func sendNotification(summary, logLine string) {
 
 	// 发送邮件通知
 	if globalConfig.Notifiers.Email.Enabled {
-		go sendEmailNotification(summary, logLine)
+		go safeSendEmailNotification(summary, logLine)
 	}
 
 	// 发送webhook通知
 	if globalConfig.Notifiers.DingTalk.Enabled {
-		go sendWebhookNotification(globalConfig.Notifiers.DingTalk, summary, logLine, "dingtalk")
+		go safeSendWebhookNotification(globalConfig.Notifiers.DingTalk, summary, logLine, "dingtalk")
 	}
 	if globalConfig.Notifiers.WeChat.Enabled {
-		go sendWebhookNotification(globalConfig.Notifiers.WeChat, summary, logLine, "wechat")
+		go safeSendWebhookNotification(globalConfig.Notifiers.WeChat, summary, logLine, "wechat")
 	}
 	if globalConfig.Notifiers.Feishu.Enabled {
-		go sendWebhookNotification(globalConfig.Notifiers.Feishu, summary, logLine, "feishu")
+		go safeSendWebhookNotification(globalConfig.Notifiers.Feishu, summary, logLine, "feishu")
 	}
 	if globalConfig.Notifiers.Slack.Enabled {
-		go sendWebhookNotification(globalConfig.Notifiers.Slack, summary, logLine, "slack")
+		go safeSendWebhookNotification(globalConfig.Notifiers.Slack, summary, logLine, "slack")
 	}
 
 	// 发送自定义webhook通知
 	for _, webhook := range globalConfig.Notifiers.CustomWebhooks {
 		if webhook.Enabled {
-			go sendWebhookNotification(webhook, summary, logLine, "custom")
+			go safeSendWebhookNotification(webhook, summary, logLine, "custom")
 		}
 	}
 }
@@ -2135,12 +2136,44 @@ func (m *LogLineMerger) Flush() (string, bool) {
 	return "", false
 }
 
-// 发送邮件通知
-func sendEmailNotification(summary, logLine string) {
+// 安全发送邮件通知（带panic恢复和超时控制）
+func safeSendEmailNotification(summary, logLine string) {
+	defer func() {
+		if r := recover(); r != nil {
+			if *verbose || *debug {
+				log.Printf("❌ 邮件通知panic恢复: %v", r)
+			}
+		}
+	}()
+	
+	// 使用context控制超时
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	// 使用channel控制并发
+	done := make(chan error, 1)
+	go func() {
+		done <- sendEmailNotificationWithContext(ctx, summary, logLine)
+	}()
+	
+	select {
+	case err := <-done:
+		if err != nil && (*verbose || *debug) {
+			log.Printf("❌ 邮件发送失败: %v", err)
+		}
+	case <-ctx.Done():
+		if *verbose || *debug {
+			log.Printf("❌ 邮件发送超时: %v", ctx.Err())
+		}
+	}
+}
+
+// 带context的邮件发送函数
+func sendEmailNotificationWithContext(ctx context.Context, summary, logLine string) error {
 	emailConfig := globalConfig.Notifiers.Email
 
 	if !emailConfig.Enabled || len(emailConfig.ToEmails) == 0 {
-		return
+		return nil
 	}
 
 	subject := fmt.Sprintf("⚠️ 重要日志告警: %s", summary)
@@ -2160,20 +2193,139 @@ func sendEmailNotification(summary, logLine string) {
 
 	var err error
 	if emailConfig.Provider == "resend" {
-		err = sendResendEmail(emailConfig, subject, body)
+		err = sendResendEmailWithContext(ctx, emailConfig, subject, body)
 	} else {
-		err = sendSMTPEmail(emailConfig, subject, body)
+		err = sendSMTPEmailWithContext(ctx, emailConfig, subject, body)
 	}
 
 	if err != nil {
+		return fmt.Errorf("邮件发送失败: %w", err)
+	}
+	
+	if *verbose || *debug {
+		log.Printf("✅ 邮件已发送: %s", subject)
+	}
+	return nil
+}
+
+// 发送邮件通知（兼容旧接口）
+func sendEmailNotification(summary, logLine string) {
+	ctx := context.Background()
+	if err := sendEmailNotificationWithContext(ctx, summary, logLine); err != nil {
 		if *verbose || *debug {
 			log.Printf("❌ 邮件发送失败: %v", err)
 		}
-	} else {
-		if *verbose || *debug {
-			log.Printf("✅ 邮件已发送: %s", subject)
+	}
+}
+
+// 带context的SMTP邮件发送
+func sendSMTPEmailWithContext(ctx context.Context, config EmailConfig, subject, body string) error {
+	// 检查context是否已取消
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	
+	// 构建邮件内容
+	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s",
+		config.FromEmail, strings.Join(config.ToEmails, ","), subject, body)
+	
+	// 构建SMTP地址
+	addr := fmt.Sprintf("%s:%d", config.Host, config.Port)
+	
+	// 创建TLS配置
+	tlsConfig := &tls.Config{
+		ServerName: config.Host,
+	}
+	
+	// 建立连接
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if err != nil {
+		return fmt.Errorf("TLS连接失败: %w", err)
+	}
+	defer conn.Close()
+	
+	// 创建SMTP客户端
+	client, err := smtp.NewClient(conn, config.Host)
+	if err != nil {
+		return fmt.Errorf("创建SMTP客户端失败: %w", err)
+	}
+	defer client.Quit()
+	
+	// 认证
+	auth := smtp.PlainAuth("", config.Username, config.Password, config.Host)
+	if err := client.Auth(auth); err != nil {
+		return fmt.Errorf("SMTP认证失败: %w", err)
+	}
+	
+	// 发送邮件
+	if err := client.Mail(config.FromEmail); err != nil {
+		return fmt.Errorf("设置发件人失败: %w", err)
+	}
+	
+	for _, to := range config.ToEmails {
+		if err := client.Rcpt(to); err != nil {
+			return fmt.Errorf("设置收件人失败: %w", err)
 		}
 	}
+	
+	writer, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("获取数据写入器失败: %w", err)
+	}
+	defer writer.Close()
+	
+	if _, err := writer.Write([]byte(msg)); err != nil {
+		return fmt.Errorf("写入邮件内容失败: %w", err)
+	}
+	
+	return nil
+}
+
+// 带context的Resend邮件发送
+func sendResendEmailWithContext(ctx context.Context, config EmailConfig, subject, body string) error {
+	// 检查context是否已取消
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+	
+	// 构建请求
+	payload := map[string]interface{}{
+		"from":    config.FromEmail,
+		"to":      config.ToEmails,
+		"subject": subject,
+		"html":    body,
+	}
+	
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("序列化请求失败: %w", err)
+	}
+	
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.resend.com/emails", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("创建请求失败: %w", err)
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+config.Password) // 使用password字段存储API key
+	
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("发送请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Resend API错误 %d: %s", resp.StatusCode, string(body))
+	}
+	
+	return nil
 }
 
 // 通过SMTP发送邮件
@@ -2280,10 +2432,42 @@ func sendResendEmail(config EmailConfig, subject, body string) error {
 	return nil
 }
 
-// 发送webhook通知
-func sendWebhookNotification(config WebhookConfig, summary, logLine, webhookType string) {
+// 安全发送webhook通知（带panic恢复和超时控制）
+func safeSendWebhookNotification(config WebhookConfig, summary, logLine, webhookType string) {
+	defer func() {
+		if r := recover(); r != nil {
+			if *verbose || *debug {
+				log.Printf("❌ %s webhook通知panic恢复: %v", webhookType, r)
+			}
+		}
+	}()
+	
+	// 使用context控制超时
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	
+	// 使用channel控制并发
+	done := make(chan error, 1)
+	go func() {
+		done <- sendWebhookNotificationWithContext(ctx, config, summary, logLine, webhookType)
+	}()
+	
+	select {
+	case err := <-done:
+		if err != nil && (*verbose || *debug) {
+			log.Printf("❌ %s webhook发送失败: %v", webhookType, err)
+		}
+	case <-ctx.Done():
+		if *verbose || *debug {
+			log.Printf("❌ %s webhook发送超时: %v", webhookType, ctx.Err())
+		}
+	}
+}
+
+// 带context的webhook发送函数
+func sendWebhookNotificationWithContext(ctx context.Context, config WebhookConfig, summary, logLine, webhookType string) error {
 	if !config.Enabled || config.URL == "" {
-		return
+		return nil
 	}
 
 	var payload interface{}
@@ -2304,18 +2488,12 @@ func sendWebhookNotification(config WebhookConfig, summary, logLine, webhookType
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		if *verbose || *debug {
-			log.Printf("❌ 构建webhook payload失败: %v", err)
-		}
-		return
+		return fmt.Errorf("构建webhook payload失败: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", config.URL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		if *verbose || *debug {
-			log.Printf("❌ 创建webhook请求失败: %v", err)
-		}
-		return
+		return fmt.Errorf("创建webhook请求失败: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -2325,26 +2503,31 @@ func sendWebhookNotification(config WebhookConfig, summary, logLine, webhookType
 		addWebhookSignature(req, jsonData, config.Secret, webhookType)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req.WithContext(ctx))
 	if err != nil {
-		if *verbose || *debug {
-			log.Printf("❌ 发送webhook失败: %v", err)
-		}
-		return
+		return fmt.Errorf("发送webhook失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		if *verbose || *debug {
-			log.Printf("❌ Webhook响应错误 %d: %s", resp.StatusCode, string(body))
-		}
-		return
+		return fmt.Errorf("webhook响应错误 %d: %s", resp.StatusCode, string(body))
 	}
 
 	if *verbose || *debug {
 		log.Printf("✅ %s webhook已发送: %s", webhookType, summary)
+	}
+	return nil
+}
+
+// 发送webhook通知（兼容旧接口）
+func sendWebhookNotification(config WebhookConfig, summary, logLine, webhookType string) {
+	ctx := context.Background()
+	if err := sendWebhookNotificationWithContext(ctx, config, summary, logLine, webhookType); err != nil {
+		if *verbose || *debug {
+			log.Printf("❌ %s webhook发送失败: %v", webhookType, err)
+		}
 	}
 }
 
