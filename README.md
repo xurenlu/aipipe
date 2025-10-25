@@ -589,26 +589,81 @@ AIPipe 提供了丰富的子命令来管理配置文件和日志源：
 ./aipipe config add "PHP应用" file "/var/log/php.log" php
 ```
 
+**参数详细说明：**
+
+`./aipipe config add` 命令的完整语法：
+```bash
+./aipipe config add <名称> <类型> <路径/服务> <格式>
+```
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| **名称** | 日志源的显示名称，用于标识和区分不同的监控源 | `"Java应用"`, `"Web服务器"`, `"数据库"` |
+| **类型** | 监控类型，支持三种： | |
+| | `file` | 监控文件路径 | `/var/log/app.log` |
+| | `journalctl` | 监控系统服务日志 | `nginx,docker,postgresql` |
+| | `stdin` | 监控标准输入 | `-` |
+| **路径/服务** | 根据类型指定： | |
+| | 文件路径 | `/var/log/nginx/access.log` |
+| | 服务名称（逗号分隔） | `nginx,docker,redis` |
+| | 标准输入标识 | `-` |
+| **格式** | 日志格式，用于AI分析优化 | |
+
+**支持的日志格式：**
+- **后端语言**: `java`, `go`, `rust`, `csharp`, `php`, `python`, `ruby`, `kotlin`, `fastapi`
+- **前端/全栈**: `nodejs`, `typescript`  
+- **Web服务器**: `nginx`
+- **云原生**: `docker`, `kubernetes`
+- **数据库**: `postgresql`, `mysql`, `redis`, `elasticsearch`
+- **开发工具**: `git`, `jenkins`, `github-actions`
+- **系统日志**: `journald`, `macos-console`, `syslog`
+
+**实际使用示例：**
+
+```bash
+# 监控Java应用日志文件
+./aipipe config add "Java应用" file "/var/log/java.log" java
+# 名称: "Java应用" | 类型: file | 路径: /var/log/java.log | 格式: java
+
+# 监控Nginx访问日志
+./aipipe config add "Web服务器" file "/var/log/nginx/access.log" nginx  
+# 名称: "Web服务器" | 类型: file | 路径: /var/log/nginx/access.log | 格式: nginx
+
+# 监控系统服务（journalctl）
+./aipipe config add "系统服务" journalctl "nginx,docker,postgresql" journald
+# 名称: "系统服务" | 类型: journalctl | 服务: nginx,docker,postgresql | 格式: journald
+
+# 监控Docker容器日志
+./aipipe config add "容器日志" file "/var/log/docker/container.log" docker
+# 名称: "容器日志" | 类型: file | 路径: /var/log/docker/container.log | 格式: docker
+
+# 监控标准输入（管道模式）
+./aipipe config add "管道输入" stdin "-" syslog
+# 名称: "管道输入" | 类型: stdin | 标识: - | 格式: syslog
+```
+
 **删除日志源：**
 ```bash
 ./aipipe config remove "Java应用"
+# 参数: 要删除的日志源名称（必须与添加时使用的名称完全一致）
 ```
 
 **列出所有日志源：**
 ```bash
 ./aipipe config list
+# 显示所有已配置的日志源，包括名称、类型、路径和格式
 ```
 
 **测试配置文件：**
 ```bash
 ./aipipe config test
-./aipipe config test ~/.config/aipipe.yaml
+# 验证配置文件的格式和内容是否正确，检查所有日志源是否可访问
 ```
 
 **编辑配置文件：**
 ```bash
 ./aipipe config edit
-./aipipe config edit ~/.config/aipipe.yaml
+# 使用默认编辑器（$EDITOR 环境变量或 vim）打开配置文件进行编辑
 ```
 
 **注意：** 编辑器使用优先级：
