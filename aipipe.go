@@ -272,13 +272,13 @@ func shouldUseMultiSource() bool {
 	if *multiSource != "" {
 		return true
 	}
-	
+
 	// 检查是否存在多源配置文件
 	configPath, err := findMultiSourceConfig()
 	if err != nil {
 		return false
 	}
-	
+
 	// 检查配置文件是否存在
 	if _, err := os.Stat(configPath); err == nil {
 		if *verbose {
@@ -286,66 +286,15 @@ func shouldUseMultiSource() bool {
 		}
 		return true
 	}
-	
+
 	return false
 }
 
 func main() {
-	flag.Parse()
-
-	// 检查是否使用多源监控
-	if *multiSource != "" || shouldUseMultiSource() {
-		processMultiSource()
-		return
-	}
-
-	// 加载配置文件
-	if *configFile != "" {
-		// 使用指定的配置文件
-		if err := loadConfigWithFormat(*configFile); err != nil {
-			log.Fatalf("❌ 加载指定配置文件失败: %v", err)
-		}
-	} else {
-		// 使用默认配置文件
-		if err := loadConfig(); err != nil {
-			log.Printf("⚠️  加载配置文件失败，使用默认配置: %v", err)
-			globalConfig = defaultConfig
-		}
-	}
-
-	fmt.Printf("🚀 AIPipe 启动 - 监控 %s 格式日志\n", *logFormat)
-
-	// 显示模式提示
-	if !*showNotImportant {
-		fmt.Println("💡 只显示重要日志（过滤的日志不显示）")
-		if !*verbose {
-			fmt.Println("   使用 --show-not-important 显示所有日志")
-		}
-	}
-
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-	if *filePath != "" {
-		// 文件监控模式
-		fmt.Printf("📁 监控文件: %s\n", *filePath)
-		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		if err := watchFile(*filePath); err != nil {
-			log.Fatalf("❌ 监控文件失败: %v", err)
-		}
-	} else if *logFormat == "journald" && (*journalServices != "" || *journalPriority != "" || *journalSince != "" || *journalUser != "" || *journalBoot || *journalKernel) {
-		// journalctl模式
-		fmt.Println("📰 使用journalctl监控系统日志...")
-		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		processJournalctl()
-	} else {
-		// 标准输入模式
-		fmt.Println("📥 从标准输入读取日志...")
-		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		if *noBatch {
-			processStdin()
-		} else {
-			processStdinWithBatch()
-		}
+	// 使用Cobra命令管理
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
 }
 
@@ -353,15 +302,15 @@ func main() {
 // 自动检测默认配置文件
 func findDefaultConfig() (string, error) {
 	configDir := filepath.Join(os.Getenv("HOME"), ".config")
-	
+
 	// 按优先级顺序检查配置文件
 	configFiles := []string{
 		"aipipe.json",
-		"aipipe.yaml", 
+		"aipipe.yaml",
 		"aipipe.yml",
 		"aipipe.toml",
 	}
-	
+
 	for _, filename := range configFiles {
 		configPath := filepath.Join(configDir, filename)
 		if _, err := os.Stat(configPath); err == nil {
@@ -371,7 +320,7 @@ func findDefaultConfig() (string, error) {
 			return configPath, nil
 		}
 	}
-	
+
 	// 没有找到任何配置文件，返回默认路径
 	defaultPath := filepath.Join(configDir, "aipipe.json")
 	return defaultPath, nil
@@ -594,19 +543,19 @@ func processJournalctl() {
 // 自动检测多源配置文件
 func findMultiSourceConfig() (string, error) {
 	configDir := filepath.Join(os.Getenv("HOME"), ".config")
-	
+
 	// 按优先级顺序检查多源配置文件
 	configFiles := []string{
 		"aipipe-sources.json",
-		"aipipe-sources.yaml", 
+		"aipipe-sources.yaml",
 		"aipipe-sources.yml",
 		"aipipe-sources.toml",
 		"aipipe-multi.json",
 		"aipipe-multi.yaml",
-		"aipipe-multi.yml", 
+		"aipipe-multi.yml",
 		"aipipe-multi.toml",
 	}
-	
+
 	for _, filename := range configFiles {
 		configPath := filepath.Join(configDir, filename)
 		if _, err := os.Stat(configPath); err == nil {
@@ -616,7 +565,7 @@ func findMultiSourceConfig() (string, error) {
 			return configPath, nil
 		}
 	}
-	
+
 	// 没有找到任何配置文件，返回默认路径
 	defaultPath := filepath.Join(configDir, "aipipe-sources.json")
 	return defaultPath, nil
@@ -626,7 +575,7 @@ func findMultiSourceConfig() (string, error) {
 func processMultiSource() {
 	var configPath string
 	var err error
-	
+
 	if *multiSource != "" {
 		// 使用指定的配置文件
 		configPath = *multiSource
@@ -637,7 +586,7 @@ func processMultiSource() {
 			log.Fatalf("❌ 查找多源配置文件失败: %v", err)
 		}
 	}
-	
+
 	// 加载多源配置文件
 	config, err := loadMultiSourceConfig(configPath)
 	if err != nil {
