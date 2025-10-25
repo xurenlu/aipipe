@@ -174,10 +174,65 @@ var (
 	batchWait        = flag.Duration("batch-wait", BATCH_WAIT_TIME, "批处理等待时间")
 	showNotImportant = flag.Bool("show-not-important", false, "显示被过滤的日志（默认不显示）")
 	contextLines     = flag.Int("context", 3, "重要日志显示的上下文行数（前后各N行）")
-
+	
+	// journalctl 特定配置
+	journalServices  = flag.String("journal-services", "", "监控的systemd服务列表，逗号分隔 (如: nginx,docker,postgresql)")
+	journalPriority  = flag.String("journal-priority", "", "监控的日志级别 (emerg,alert,crit,err,warning,notice,info,debug)")
+	journalSince     = flag.String("journal-since", "", "监控开始时间 (如: '1 hour ago', '2023-10-17 10:00:00')")
+	journalUntil     = flag.String("journal-until", "", "监控结束时间 (如: 'now', '2023-10-17 18:00:00')")
+	journalUser      = flag.String("journal-user", "", "监控特定用户的日志")
+	journalBoot      = flag.Bool("journal-boot", false, "只监控当前启动的日志")
+	journalKernel    = flag.Bool("journal-kernel", false, "只监控内核消息")
+	
 	// 全局变量：当前监控的日志文件路径（用于通知）
 	currentLogFile = "stdin"
 )
+
+// 构建journalctl命令
+func buildJournalctlCommand() []string {
+	args := []string{"journalctl", "-f", "--no-pager"}
+	
+	// 添加服务过滤
+	if *journalServices != "" {
+		services := strings.Split(*journalServices, ",")
+		for _, service := range services {
+			service = strings.TrimSpace(service)
+			if service != "" {
+				args = append(args, "-u", service)
+			}
+		}
+	}
+	
+	// 添加优先级过滤
+	if *journalPriority != "" {
+		args = append(args, "-p", *journalPriority)
+	}
+	
+	// 添加时间范围
+	if *journalSince != "" {
+		args = append(args, "--since", *journalSince)
+	}
+	if *journalUntil != "" {
+		args = append(args, "--until", *journalUntil)
+	}
+	
+	// 添加用户过滤
+	if *journalUser != "" {
+		args = append(args, "_UID="+*journalUser)
+	}
+	
+	// 添加启动过滤
+	if *journalBoot {
+		args = append(args, "-b")
+	}
+	
+	// 添加内核过滤
+	if *journalKernel {
+		args = append(args, "-k")
+	}
+	
+	return args
+}
 
 func main() {
 	flag.Parse()
@@ -207,11 +262,20 @@ func main() {
 		if err := watchFile(*filePath); err != nil {
 			log.Fatalf("❌ 监控文件失败: %v", err)
 		}
+	} else if *logFormat == "journald" && (*journalServices != "" || *journalPriority != "" || *journalSince != "" || *journalUser != "" || *journalBoot || *journalKernel) {
+		// journalctl模式
+		fmt.Println("📰 使用journalctl监控系统日志...")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		processJournalctl()
 	} else {
 		// 标准输入模式
 		fmt.Println("📥 从标准输入读取日志...")
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		processStdin()
+		if *noBatch {
+			processStdin()
+		} else {
+			processStdinWithBatch()
+		}
 	}
 }
 
@@ -346,6 +410,91 @@ func processStdinLineByLine() {
 
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Printf("📊 统计: 总计 %d 行, 过滤 %d 行, 告警 %d 次\n", lineCount, filteredCount, alertCount)
+}
+
+// 处理journalctl命令
+func processJournalctl() {
+	// 构建journalctl命令
+	args := buildJournalctlCommand()
+	
+	// 显示使用的命令
+	fmt.Printf("🔧 执行命令: %s\n", strings.Join(args, " "))
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 创建命令
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	
+	// 创建管道
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Fatalf("❌ 创建管道失败: %v", err)
+	}
+	
+	// 启动命令
+	if err := cmd.Start(); err != nil {
+		log.Fatalf("❌ 启动journalctl失败: %v", err)
+	}
+	
+	// 处理输出
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	
+	lineCount := 0
+	filteredCount := 0
+	alertCount := 0
+	batchCount := 0
+	
+	// 创建批处理器
+	batcher := NewLogBatcher(func(lines []string) {
+		batchCount++
+		if *verbose || *debug {
+			log.Printf("📦 批次 #%d: 处理 %d 行日志", batchCount, len(lines))
+		}
+		
+		filtered, alerted := processBatch(lines)
+		filteredCount += filtered
+		alertCount += alerted
+	})
+	
+	// 创建日志行合并器
+	merger := NewLogLineMerger(*logFormat)
+	
+	// 读取日志行
+	for scanner.Scan() {
+		line := scanner.Text()
+		lineCount++
+		
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		
+		// 尝试合并多行日志
+		completeLine, hasComplete := merger.Add(line)
+		if hasComplete {
+			// 添加到批处理器
+			batcher.Add(completeLine)
+		}
+	}
+	
+	// 刷新最后的缓冲
+	if lastLine, hasLast := merger.Flush(); hasLast {
+		batcher.Add(lastLine)
+	}
+	
+	if err := scanner.Err(); err != nil {
+		log.Printf("❌ 读取journalctl输出失败: %v", err)
+	}
+	
+	// 刷新剩余的日志
+	batcher.Flush()
+	
+	// 等待命令结束
+	cmd.Wait()
+	
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("📊 统计: 总计 %d 行, 过滤 %d 行, 告警 %d 次, 批次 %d 个\n", lineCount, filteredCount, alertCount, batchCount)
 }
 
 // 批处理模式处理标准输入
