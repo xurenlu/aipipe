@@ -23,9 +23,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/fsnotify/fsnotify"
 	"gopkg.in/yaml.v3"
-	"github.com/BurntSushi/toml"
 )
 
 // 邮件配置
@@ -266,11 +266,35 @@ func buildJournalctlCommand() []string {
 	return args
 }
 
+// 检查是否应该使用多源监控
+func shouldUseMultiSource() bool {
+	// 如果指定了多源配置文件，使用多源监控
+	if *multiSource != "" {
+		return true
+	}
+	
+	// 检查是否存在多源配置文件
+	configPath, err := findMultiSourceConfig()
+	if err != nil {
+		return false
+	}
+	
+	// 检查配置文件是否存在
+	if _, err := os.Stat(configPath); err == nil {
+		if *verbose {
+			log.Printf("🔍 自动检测到多源配置文件: %s", configPath)
+		}
+		return true
+	}
+	
+	return false
+}
+
 func main() {
 	flag.Parse()
 
 	// 检查是否使用多源监控
-	if *multiSource != "" {
+	if *multiSource != "" || shouldUseMultiSource() {
 		processMultiSource()
 		return
 	}
@@ -326,8 +350,38 @@ func main() {
 }
 
 // 加载配置文件
+// 自动检测默认配置文件
+func findDefaultConfig() (string, error) {
+	configDir := filepath.Join(os.Getenv("HOME"), ".config")
+	
+	// 按优先级顺序检查配置文件
+	configFiles := []string{
+		"aipipe.json",
+		"aipipe.yaml", 
+		"aipipe.yml",
+		"aipipe.toml",
+	}
+	
+	for _, filename := range configFiles {
+		configPath := filepath.Join(configDir, filename)
+		if _, err := os.Stat(configPath); err == nil {
+			if *verbose {
+				log.Printf("🔍 找到默认配置文件: %s", configPath)
+			}
+			return configPath, nil
+		}
+	}
+	
+	// 没有找到任何配置文件，返回默认路径
+	defaultPath := filepath.Join(configDir, "aipipe.json")
+	return defaultPath, nil
+}
+
 func loadConfig() error {
-	configPath := filepath.Join(os.Getenv("HOME"), ".config", "aipipe.json")
+	configPath, err := findDefaultConfig()
+	if err != nil {
+		return fmt.Errorf("查找默认配置文件失败: %v", err)
+	}
 
 	// 检查配置文件是否存在
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -335,15 +389,9 @@ func loadConfig() error {
 		return createDefaultConfig(configPath)
 	}
 
-	// 读取配置文件
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return fmt.Errorf("读取配置文件失败: %w", err)
-	}
-
-	// 解析配置文件
-	if err := json.Unmarshal(data, &globalConfig); err != nil {
-		return fmt.Errorf("解析配置文件失败: %w", err)
+	// 使用多格式加载
+	if err := loadConfigWithFormat(configPath); err != nil {
+		return err
 	}
 
 	// 验证必要的配置项
@@ -543,10 +591,55 @@ func processJournalctl() {
 	fmt.Printf("📊 统计: 总计 %d 行, 过滤 %d 行, 告警 %d 次, 批次 %d 个\n", lineCount, filteredCount, alertCount, batchCount)
 }
 
+// 自动检测多源配置文件
+func findMultiSourceConfig() (string, error) {
+	configDir := filepath.Join(os.Getenv("HOME"), ".config")
+	
+	// 按优先级顺序检查多源配置文件
+	configFiles := []string{
+		"aipipe-sources.json",
+		"aipipe-sources.yaml", 
+		"aipipe-sources.yml",
+		"aipipe-sources.toml",
+		"aipipe-multi.json",
+		"aipipe-multi.yaml",
+		"aipipe-multi.yml", 
+		"aipipe-multi.toml",
+	}
+	
+	for _, filename := range configFiles {
+		configPath := filepath.Join(configDir, filename)
+		if _, err := os.Stat(configPath); err == nil {
+			if *verbose {
+				log.Printf("🔍 找到多源配置文件: %s", configPath)
+			}
+			return configPath, nil
+		}
+	}
+	
+	// 没有找到任何配置文件，返回默认路径
+	defaultPath := filepath.Join(configDir, "aipipe-sources.json")
+	return defaultPath, nil
+}
+
 // 处理多源监控
 func processMultiSource() {
+	var configPath string
+	var err error
+	
+	if *multiSource != "" {
+		// 使用指定的配置文件
+		configPath = *multiSource
+	} else {
+		// 自动检测多源配置文件
+		configPath, err = findMultiSourceConfig()
+		if err != nil {
+			log.Fatalf("❌ 查找多源配置文件失败: %v", err)
+		}
+	}
+	
 	// 加载多源配置文件
-	config, err := loadMultiSourceConfig(*multiSource)
+	config, err := loadMultiSourceConfig(configPath)
 	if err != nil {
 		log.Fatalf("❌ 加载多源配置文件失败: %v", err)
 	}
@@ -816,25 +909,25 @@ func detectConfigFormat(filePath string) string {
 		if err != nil {
 			return "json" // 默认格式
 		}
-		
+
 		// 检测JSON格式
 		var jsonTest interface{}
 		if json.Unmarshal(data, &jsonTest) == nil {
 			return "json"
 		}
-		
+
 		// 检测YAML格式
 		var yamlTest interface{}
 		if yaml.Unmarshal(data, &yamlTest) == nil {
 			return "yaml"
 		}
-		
+
 		// 检测TOML格式
 		var tomlTest interface{}
 		if _, err := toml.Decode(string(data), &tomlTest); err == nil {
 			return "toml"
 		}
-		
+
 		return "json" // 默认格式
 	}
 }

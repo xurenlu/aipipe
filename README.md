@@ -432,6 +432,39 @@ AIPipe 支持多种配置文件格式，自动检测和解析：
 - ✅ **TOML** - 支持 `.toml` 扩展名
 - ✅ **自动检测** - 根据文件扩展名和内容自动识别格式
 
+### 自动检测默认配置文件
+
+AIPipe 会自动检测 `~/.config/` 目录下的配置文件：
+
+#### 主配置文件检测顺序
+1. `~/.config/aipipe.json`
+2. `~/.config/aipipe.yaml`
+3. `~/.config/aipipe.yml`
+4. `~/.config/aipipe.toml`
+
+#### 多源配置文件检测顺序
+1. `~/.config/aipipe-sources.json`
+2. `~/.config/aipipe-sources.yaml`
+3. `~/.config/aipipe-sources.yml`
+4. `~/.config/aipipe-sources.toml`
+5. `~/.config/aipipe-multi.json`
+6. `~/.config/aipipe-multi.yaml`
+7. `~/.config/aipipe-multi.yml`
+8. `~/.config/aipipe-multi.toml`
+
+#### 自动启动多源监控
+如果检测到多源配置文件，AIPipe 会自动启动多源监控模式：
+
+```bash
+# 无需指定参数，自动检测并启动
+./aipipe
+
+# 输出示例：
+# 🔍 找到默认配置文件: /home/user/.config/aipipe.yaml
+# 🔍 自动检测到多源配置文件: /home/user/.config/aipipe-sources.yaml
+# 🚀 AIPipe 多源监控启动 - 监控 4 个源
+```
+
 ## 🔧 配置
 
 ### 配置文件格式
