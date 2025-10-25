@@ -1228,7 +1228,8 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ## 👤 作者
 
-**xurenlu** <m@some.im>
+**xurenlu** <m@some.im>  
+🌐 主页: [https://83d.me](https://83d.me)
 
 ## 🙏 致谢
 
