@@ -13,11 +13,33 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// 根命令
-var rootCmd = &cobra.Command{
-	Use:   "aipipe",
-	Short: "智能日志监控工具",
-	Long: `AIPipe 是一个智能日志过滤和监控工具，使用可配置的 AI 服务自动分析日志内容，
+// 检测语言环境
+func detectLanguage() string {
+	// 检测环境变量
+	lang := os.Getenv("LANG")
+	if lang == "" {
+		lang = os.Getenv("LC_ALL")
+	}
+	if lang == "" {
+		lang = os.Getenv("LC_MESSAGES")
+	}
+	
+	// 检查是否包含中文标识
+	if strings.Contains(lang, "zh_CN") || strings.Contains(lang, "zh_TW") || strings.Contains(lang, "zh_HK") {
+		return "zh"
+	}
+	
+	// 默认英文
+	return "en"
+}
+
+// 全局语言变量
+var currentLang = detectLanguage()
+
+// 获取根命令描述
+func getRootCmdDescription() string {
+	if currentLang == "zh" {
+		return `AIPipe 是一个智能日志过滤和监控工具，使用可配置的 AI 服务自动分析日志内容，
 过滤不重要的日志，并对重要事件发送通知。
 
 支持多种日志格式：Java、PHP、Nginx、Ruby、Python、FastAPI、journald、syslog等。
@@ -46,8 +68,55 @@ var rootCmd = &cobra.Command{
   aipipe --debug        - 调试模式
 
 文档：
-  https://github.com/xurenlu/aipipe/blob/main/README.md`,
-	Run: runMain,
+  https://github.com/xurenlu/aipipe/blob/main/README.md`
+	}
+	return `AIPipe is an intelligent log filtering and monitoring tool that uses AI services
+to automatically analyze log content, filter unimportant logs, and send notifications
+for important events.
+
+Supports multiple log formats: Java, PHP, Nginx, Ruby, Python, FastAPI, journald, syslog, etc.
+Supports multi-source monitoring: monitor multiple log files, journalctl, stdin simultaneously.
+
+Quick Start:
+  1. Add log source:
+     aipipe config add "App Name" file "/var/log/app.log" java
+  
+  2. Start monitoring:
+     aipipe
+  
+  3. View configuration:
+     aipipe config list
+
+Common Commands:
+  aipipe config add      - Add log monitoring source
+  aipipe config list     - List all log sources
+  aipipe config test     - Test configuration file
+  aipipe config edit     - Edit configuration file
+  aipipe config remove   - Remove log source
+
+More Help:
+  aipipe config --help   - View configuration management details
+  aipipe --verbose       - Show verbose output
+  aipipe --debug         - Debug mode
+
+Documentation:
+  https://github.com/xurenlu/aipipe/blob/main/README.md`
+}
+
+// 根命令
+var rootCmd = &cobra.Command{
+	Use:   "aipipe",
+	Short: getRootCmdShort(),
+	Long:  getRootCmdDescription(),
+	Run:   runMain,
+}
+
+// 获取根命令简短描述
+func getRootCmdShort() string {
+	if currentLang == "zh" {
+		return "智能日志监控工具"
+	}
+	return "Intelligent log monitoring tool"
 }
 
 // 配置文件管理命令
@@ -196,7 +265,7 @@ var listCmd = &cobra.Command{
   #    描述: 监控Java应用程序日志
   # 2. 系统服务监控 (journalctl) - ✅ 启用
   #    服务: nginx, docker, postgresql`,
-	Run:   runListSources,
+	Run: runListSources,
 }
 
 // 测试配置文件命令
