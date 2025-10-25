@@ -91,7 +91,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -ldflags="-s -w -X main.version=test" -o aipipe-test aipipe.go
+          go build -ldflags="-s -w -X main.version=test" -o aipipe-test aipipe.go cmd.go
 
       - name: Test binary help
         run: ./aipipe-test --help

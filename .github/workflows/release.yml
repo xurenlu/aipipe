@@ -58,7 +58,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o aipipe${{ matrix.suffix }} aipipe.go
+          go build -ldflags="-s -w -X main.version=${{ github.ref_name }}" -o aipipe${{ matrix.suffix }} aipipe.go cmd.go
 
       - name: Test binary
         run: ./aipipe${{ matrix.suffix }} --help
