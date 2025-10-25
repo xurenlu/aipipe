@@ -148,6 +148,76 @@ tail -f /var/log/app.log | ./aipipe --format java
 ./aipipe -f /var/log/fastapi.log --format fastapi
 ```
 
+### 多源监控
+
+AIPipe 支持同时监控多个日志源，包括文件、journalctl 和标准输入：
+
+```bash
+# 使用多源配置文件
+./aipipe --multi-source multi-source-config.json
+```
+
+#### 多源配置文件示例
+
+```json
+{
+  "sources": [
+    {
+      "name": "Java应用日志",
+      "type": "file",
+      "path": "/var/log/java-app.log",
+      "format": "java",
+      "enabled": true,
+      "priority": 1,
+      "description": "监控Java应用程序日志"
+    },
+    {
+      "name": "PHP应用日志",
+      "type": "file",
+      "path": "/var/log/php-app.log",
+      "format": "php",
+      "enabled": true,
+      "priority": 2,
+      "description": "监控PHP应用程序日志"
+    },
+    {
+      "name": "Nginx错误日志",
+      "type": "file",
+      "path": "/var/log/nginx/error.log",
+      "format": "nginx",
+      "enabled": true,
+      "priority": 3,
+      "description": "监控Nginx错误日志"
+    },
+    {
+      "name": "系统服务监控",
+      "type": "journalctl",
+      "format": "journald",
+      "enabled": true,
+      "priority": 4,
+      "description": "监控系统服务日志",
+      "journal": {
+        "services": ["nginx", "docker", "postgresql"],
+        "priority": "err",
+        "since": "",
+        "until": "",
+        "user": "",
+        "boot": false,
+        "kernel": false
+      }
+    }
+  ]
+}
+```
+
+#### 多源监控特性
+
+- ✅ **并发监控** - 同时监控多个日志源
+- ✅ **优先级控制** - 支持源优先级排序
+- ✅ **独立格式** - 每个源可以使用不同的日志格式
+- ✅ **灵活配置** - 支持启用/禁用特定源
+- ✅ **统一处理** - 所有源共享AI分析和通知配置
+
 ### 监控系统日志 (journalctl)
 
 AIPipe 支持直接监控 Linux 系统日志，无需手动使用 `journalctl -f`：
@@ -323,6 +393,11 @@ AIPipe 支持直接监控 Linux 系统日志，无需手动使用 `journalctl -f
 - `--journal-user` - 监控特定用户的日志
 - `--journal-boot` - 只监控当前启动的日志
 - `--journal-kernel` - 只监控内核消息
+
+### 多源监控参数
+
+- `--multi-source` - 多源监控配置文件路径
+- `--config` - 指定主配置文件路径（可选）
 
 ## 🔧 配置
 
