@@ -682,8 +682,12 @@ func monitorFileSource(ctx context.Context, source SourceConfig) {
 		processBatch(lines)
 	})
 
-	// 监控文件
+	// 启动文件监控（非阻塞）
 	watchFileWithContext(ctx, source.Path, merger, batcher)
+
+	// 等待context取消，保持goroutine运行
+	<-ctx.Done()
+	log.Printf("🔍 监控源已停止: %s", source.Name)
 }
 
 // 监控journalctl源
@@ -939,10 +943,138 @@ func loadConfigWithFormat(configPath string) error {
 
 // 带上下文的文件监控
 func watchFileWithContext(ctx context.Context, filePath string, merger *LogLineMerger, batcher *LogBatcher) {
-	// 实现带上下文的文件监控逻辑
-	// 这里可以复用现有的watchFile逻辑，但需要支持context取消
-	// 为了简化，这里先使用基本的文件监控
-	watchFile(filePath)
+	// 检查文件是否存在
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		log.Printf("⚠️  文件不存在，等待创建: %s", filePath)
+		// 等待文件创建，每5秒检查一次
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := os.Stat(filePath); err == nil {
+					log.Printf("✅ 文件已创建: %s", filePath)
+					break
+				}
+			}
+		}
+	}
+
+	// 启动文件监控goroutine
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("❌ 文件监控panic恢复: %v", r)
+			}
+		}()
+
+		// 使用fsnotify监控文件
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			log.Printf("❌ 创建文件监控器失败: %v", err)
+			return
+		}
+		defer watcher.Close()
+
+		// 监控文件目录
+		dir := filepath.Dir(filePath)
+		if err := watcher.Add(dir); err != nil {
+			log.Printf("❌ 添加目录监控失败: %v", err)
+			return
+		}
+
+		// 读取初始文件内容
+		file, err := os.Open(filePath)
+		if err != nil {
+			log.Printf("❌ 打开文件失败: %v", err)
+			return
+		}
+		defer file.Close()
+
+		// 定位到文件末尾
+		file.Seek(0, io.SeekEnd)
+
+		// 读取文件内容
+		scanner := bufio.NewScanner(file)
+		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+
+		for scanner.Scan() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			line := scanner.Text()
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+
+			// 尝试合并多行日志
+			completeLine, hasComplete := merger.Add(line)
+			if hasComplete {
+				batcher.Add(completeLine)
+			}
+		}
+
+		// 刷新最后的缓冲
+		if lastLine, hasLast := merger.Flush(); hasLast {
+			batcher.Add(lastLine)
+		}
+
+		// 监控文件变化
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+
+				// 文件写入事件
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					if event.Name == filePath {
+						// 读取新内容
+						file, err := os.Open(filePath)
+						if err != nil {
+							continue
+						}
+
+						// 定位到文件末尾
+						file.Seek(0, io.SeekEnd)
+
+						scanner := bufio.NewScanner(file)
+						scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+
+						for scanner.Scan() {
+							line := scanner.Text()
+							if strings.TrimSpace(line) == "" {
+								continue
+							}
+
+							completeLine, hasComplete := merger.Add(line)
+							if hasComplete {
+								batcher.Add(completeLine)
+							}
+						}
+
+						file.Close()
+					}
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				log.Printf("⚠️  文件监控错误: %v", err)
+			}
+		}
+	}()
+
+	// 函数立即返回，goroutine继续在后台运行
 }
 
 // 批处理模式处理标准输入
