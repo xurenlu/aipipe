@@ -25,6 +25,18 @@ Welcome to the AIPipe documentation! This directory contains comprehensive docum
   - パフォーマンス指標とビジネス価値
   - 技術アーキテクチャとユースケース
 
+## 📊 项目状态文档
+
+### 项目概览
+- **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - 完整的项目状态和进度报告
+- **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - 项目成果和成就总结
+- **[TECHNICAL_ARCHITECTURE.md](TECHNICAL_ARCHITECTURE.md)** - 详细的技术架构设计
+
+### 开发文档
+- **[API_REFERENCE.md](API_REFERENCE.md)** - 完整的API接口文档
+- **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** - 部署、运维和故障排除指南
+- **[CODE_REFACTORING.md](CODE_REFACTORING.md)** - 代码重构和优化说明
+
 ## 🎯 Quick Navigation
 
 ### For Developers

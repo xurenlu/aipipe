@@ -748,11 +748,11 @@ func NewLogLevelFilter(config LogLevelConfig) *LogLevelFilter {
 func (f *LogLevelFilter) ShouldShow(level string) bool {
 	f.mutex.RLock()
 	defer f.mutex.RUnlock()
-	
+
 	if !f.config.Enabled {
 		return true // 如果未启用过滤，显示所有日志
 	}
-	
+
 	switch level {
 	case "debug":
 		return f.config.ShowDebug
@@ -773,15 +773,15 @@ func (f *LogLevelFilter) ShouldShow(level string) bool {
 func (f *LogLevelFilter) IsInRange(level string) bool {
 	f.mutex.RLock()
 	defer f.mutex.RUnlock()
-	
+
 	if !f.config.Enabled {
 		return true
 	}
-	
+
 	levelPriority := f.getLevelPriority(level)
 	minPriority := f.getLevelPriority(f.config.MinLevel)
 	maxPriority := f.getLevelPriority(f.config.MaxLevel)
-	
+
 	return levelPriority >= minPriority && levelPriority <= maxPriority
 }
 
@@ -816,14 +816,14 @@ func (f *LogLevelFilter) ExtractLevel(logLine string) string {
 		{"(?i)\\b(ERROR|error)\\b", "error"},
 		{"(?i)\\b(FATAL|fatal|CRITICAL|critical)\\b", "fatal"},
 	}
-	
+
 	for _, p := range patterns {
 		matched, _ := regexp.MatchString(p.pattern, logLine)
 		if matched {
 			return p.level
 		}
 	}
-	
+
 	return "info" // 默认级别
 }
 
