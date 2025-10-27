@@ -3335,16 +3335,6 @@ func handlePerformanceStats() {
 
 // 用户体验相关结构
 
-// 输出格式配置
-type OutputFormat struct {
-	Type     string `json:"type"`     // json, csv, table, custom
-	Template string `json:"template"` // 自定义模板
-	Color    bool   `json:"color"`    // 颜色支持
-	Filter   string `json:"filter"`   // 输出过滤
-	Width    int    `json:"width"`    // 表格宽度
-	Headers  bool   `json:"headers"`  // 显示表头
-}
-
 // 配置向导
 type ConfigWizard struct {
 	steps       []WizardStep
