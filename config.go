@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -728,4 +729,107 @@ func (of *OutputFormatter) formatCustom(data interface{}) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+// 日志级别过滤器
+type LogLevelFilter struct {
+	config LogLevelConfig
+	mutex  sync.RWMutex
+}
+
+// 创建日志级别过滤器
+func NewLogLevelFilter(config LogLevelConfig) *LogLevelFilter {
+	return &LogLevelFilter{
+		config: config,
+	}
+}
+
+// 检查日志级别是否应该显示
+func (f *LogLevelFilter) ShouldShow(level string) bool {
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
+	
+	if !f.config.Enabled {
+		return true // 如果未启用过滤，显示所有日志
+	}
+	
+	switch level {
+	case "debug":
+		return f.config.ShowDebug
+	case "info":
+		return f.config.ShowInfo
+	case "warn", "warning":
+		return f.config.ShowWarn
+	case "error":
+		return f.config.ShowError
+	case "fatal", "critical":
+		return f.config.ShowFatal
+	default:
+		return true // 未知级别默认显示
+	}
+}
+
+// 检查日志级别是否在范围内
+func (f *LogLevelFilter) IsInRange(level string) bool {
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
+	
+	if !f.config.Enabled {
+		return true
+	}
+	
+	levelPriority := f.getLevelPriority(level)
+	minPriority := f.getLevelPriority(f.config.MinLevel)
+	maxPriority := f.getLevelPriority(f.config.MaxLevel)
+	
+	return levelPriority >= minPriority && levelPriority <= maxPriority
+}
+
+// 获取日志级别优先级
+func (f *LogLevelFilter) getLevelPriority(level string) int {
+	switch level {
+	case "debug":
+		return 0
+	case "info":
+		return 1
+	case "warn", "warning":
+		return 2
+	case "error":
+		return 3
+	case "fatal", "critical":
+		return 4
+	default:
+		return 0
+	}
+}
+
+// 从日志行中提取日志级别
+func (f *LogLevelFilter) ExtractLevel(logLine string) string {
+	// 常见的日志级别模式
+	patterns := []struct {
+		pattern string
+		level   string
+	}{
+		{"(?i)\\b(DEBUG|debug)\\b", "debug"},
+		{"(?i)\\b(INFO|info)\\b", "info"},
+		{"(?i)\\b(WARN|warn|warning|WARNING)\\b", "warn"},
+		{"(?i)\\b(ERROR|error)\\b", "error"},
+		{"(?i)\\b(FATAL|fatal|CRITICAL|critical)\\b", "fatal"},
+	}
+	
+	for _, p := range patterns {
+		matched, _ := regexp.MatchString(p.pattern, logLine)
+		if matched {
+			return p.level
+		}
+	}
+	
+	return "info" // 默认级别
+}
+
+// 更新配置
+func (f *LogLevelFilter) UpdateConfig(config LogLevelConfig) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.config = config
 }
