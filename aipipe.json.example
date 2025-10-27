@@ -120,6 +120,18 @@
     "memory_limit": 1073741824,
     "enabled": true
   },
+  "concurrency": {
+    "max_concurrency": 100,
+    "backpressure_threshold": 80,
+    "load_balance_strategy": "round_robin",
+    "adaptive_scaling": true,
+    "scale_up_threshold": 0.8,
+    "scale_down_threshold": 0.3,
+    "min_workers": 2,
+    "max_workers": 20,
+    "scaling_interval": "30s",
+    "enabled": true
+  },
   "notifiers": {
     "email": {
       "enabled": false,

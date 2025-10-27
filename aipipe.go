@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"net/smtp"
 	"net/url"
@@ -19,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -285,48 +287,48 @@ type PerformanceMetrics struct {
 
 // 内存配置
 type MemoryConfig struct {
-	MaxMemoryUsage    int64         `json:"max_memory_usage"`    // 最大内存使用量（字节）
-	GCThreshold       int64         `json:"gc_threshold"`        // 垃圾回收阈值
-	StreamBufferSize  int           `json:"stream_buffer_size"`  // 流式处理缓冲区大小
-	ChunkSize         int           `json:"chunk_size"`          // 分块处理大小
+	MaxMemoryUsage      int64         `json:"max_memory_usage"`      // 最大内存使用量（字节）
+	GCThreshold         int64         `json:"gc_threshold"`          // 垃圾回收阈值
+	StreamBufferSize    int           `json:"stream_buffer_size"`    // 流式处理缓冲区大小
+	ChunkSize           int           `json:"chunk_size"`            // 分块处理大小
 	MemoryCheckInterval time.Duration `json:"memory_check_interval"` // 内存检查间隔
-	AutoGC            bool          `json:"auto_gc"`             // 自动垃圾回收
-	MemoryLimit       int64         `json:"memory_limit"`        // 内存限制
-	Enabled           bool          `json:"enabled"`             // 是否启用内存优化
+	AutoGC              bool          `json:"auto_gc"`               // 自动垃圾回收
+	MemoryLimit         int64         `json:"memory_limit"`          // 内存限制
+	Enabled             bool          `json:"enabled"`               // 是否启用内存优化
 }
 
 // 内存统计
 type MemoryStats struct {
-	CurrentUsage      int64     `json:"current_usage"`       // 当前内存使用量
-	PeakUsage         int64     `json:"peak_usage"`          // 峰值内存使用量
-	GCCount           int64     `json:"gc_count"`            // 垃圾回收次数
-	GCTime            int64     `json:"gc_time"`             // 垃圾回收时间（纳秒）
-	AllocCount        int64     `json:"alloc_count"`         // 分配次数
-	FreeCount         int64     `json:"free_count"`          // 释放次数
-	HeapSize          int64     `json:"heap_size"`           // 堆大小
-	StackSize         int64     `json:"stack_size"`          // 栈大小
-	LastGC            time.Time `json:"last_gc"`             // 上次垃圾回收时间
-	MemoryPressure    float64   `json:"memory_pressure"`     // 内存压力（0-1）
+	CurrentUsage   int64     `json:"current_usage"`   // 当前内存使用量
+	PeakUsage      int64     `json:"peak_usage"`      // 峰值内存使用量
+	GCCount        int64     `json:"gc_count"`        // 垃圾回收次数
+	GCTime         int64     `json:"gc_time"`         // 垃圾回收时间（纳秒）
+	AllocCount     int64     `json:"alloc_count"`     // 分配次数
+	FreeCount      int64     `json:"free_count"`      // 释放次数
+	HeapSize       int64     `json:"heap_size"`       // 堆大小
+	StackSize      int64     `json:"stack_size"`      // 栈大小
+	LastGC         time.Time `json:"last_gc"`         // 上次垃圾回收时间
+	MemoryPressure float64   `json:"memory_pressure"` // 内存压力（0-1）
 }
 
 // 流式处理器
 type StreamProcessor struct {
-	BufferSize    int
-	ChunkSize     int
-	ProcessFunc   func([]string) error
-	Buffer        []string
+	BufferSize     int
+	ChunkSize      int
+	ProcessFunc    func([]string) error
+	Buffer         []string
 	TotalProcessed int64
-	mutex         sync.Mutex
+	mutex          sync.Mutex
 }
 
 // 内存管理器
 type MemoryManager struct {
-	config        MemoryConfig
-	stats         MemoryStats
+	config          MemoryConfig
+	stats           MemoryStats
 	streamProcessor *StreamProcessor
-	mutex         sync.RWMutex
-	lastGC        time.Time
-	allocations   map[uintptr]int64
+	mutex           sync.RWMutex
+	lastGC          time.Time
+	allocations     map[uintptr]int64
 }
 
 // 内存监控器
@@ -351,9 +353,116 @@ type MemoryPool struct {
 
 // 内存分配器
 type MemoryAllocator struct {
-	pool          *MemoryPool
-	allocations   map[uintptr]int64
+	pool           *MemoryPool
+	allocations    map[uintptr]int64
 	totalAllocated int64
+	mutex          sync.RWMutex
+}
+
+// 并发处理相关结构
+
+// 并发控制配置
+type ConcurrencyConfig struct {
+	MaxConcurrency        int           `json:"max_concurrency"`        // 最大并发数
+	BackpressureThreshold int           `json:"backpressure_threshold"` // 背压阈值
+	LoadBalanceStrategy   string        `json:"load_balance_strategy"`  // 负载均衡策略
+	AdaptiveScaling       bool          `json:"adaptive_scaling"`       // 自适应扩缩容
+	ScaleUpThreshold      float64       `json:"scale_up_threshold"`     // 扩容阈值
+	ScaleDownThreshold    float64       `json:"scale_down_threshold"`   // 缩容阈值
+	MinWorkers            int           `json:"min_workers"`            // 最小工作协程数
+	MaxWorkers            int           `json:"max_workers"`            // 最大工作协程数
+	ScalingInterval       time.Duration `json:"scaling_interval"`       // 扩缩容检查间隔
+	Enabled               bool          `json:"enabled"`                // 是否启用并发控制
+}
+
+// 背压控制器
+type BackpressureController struct {
+	threshold     int
+	currentLoad   int64
+	blockedCount  int64
+	rejectedCount int64
+	mutex         sync.RWMutex
+	callbacks     []func(int64)
+}
+
+// 负载均衡器
+type LoadBalancer struct {
+	strategy     string
+	workers      []*Worker
+	currentIndex int
+	workerStats  map[int]*WorkerStats
+	mutex        sync.RWMutex
+}
+
+// 工作协程统计
+type WorkerStats struct {
+	ID            int           `json:"id"`
+	ProcessedJobs int64         `json:"processed_jobs"`
+	TotalTime     time.Duration `json:"total_time"`
+	AverageTime   time.Duration `json:"average_time"`
+	ErrorCount    int64         `json:"error_count"`
+	LastActivity  time.Time     `json:"last_activity"`
+	CurrentLoad   int64         `json:"current_load"`
+	IsHealthy     bool          `json:"is_healthy"`
+}
+
+// 自适应扩缩容器
+type AdaptiveScaler struct {
+	config         ConcurrencyConfig
+	currentWorkers int
+	workerStats    map[int]*WorkerStats
+	lastScaleTime  time.Time
+	mutex          sync.RWMutex
+}
+
+// 并发统计
+type ConcurrencyStats struct {
+	TotalJobs        int64         `json:"total_jobs"`
+	ProcessedJobs    int64         `json:"processed_jobs"`
+	ActiveWorkers    int           `json:"active_workers"`
+	BlockedJobs      int64         `json:"blocked_jobs"`
+	RejectedJobs     int64         `json:"rejected_jobs"`
+	AverageLatency   time.Duration `json:"average_latency"`
+	Throughput       float64       `json:"throughput"`
+	ErrorRate        float64       `json:"error_rate"`
+	BackpressureRate float64       `json:"backpressure_rate"`
+	LastUpdated      time.Time     `json:"last_updated"`
+}
+
+// 并发控制器
+type ConcurrencyController struct {
+	config         ConcurrencyConfig
+	backpressure   *BackpressureController
+	loadBalancer   *LoadBalancer
+	adaptiveScaler *AdaptiveScaler
+	stats          ConcurrencyStats
+	mutex          sync.RWMutex
+	stopChan       chan bool
+}
+
+// 任务优先级
+type TaskPriority int
+
+const (
+	PriorityLow      TaskPriority = 1
+	PriorityNormal   TaskPriority = 2
+	PriorityHigh     TaskPriority = 3
+	PriorityCritical TaskPriority = 4
+)
+
+// 优先级队列
+type PriorityQueue struct {
+	jobs       []ProcessingJob
+	priorities map[string]TaskPriority
+	mutex      sync.RWMutex
+}
+
+// 任务调度器
+type TaskScheduler struct {
+	priorityQueue *PriorityQueue
+	workers       []*Worker
+	loadBalancer  *LoadBalancer
+	stats         ConcurrencyStats
 	mutex         sync.RWMutex
 }
 
@@ -383,9 +492,12 @@ type Config struct {
 
 	// 工作池配置
 	WorkerPool WorkerPoolConfig `json:"worker_pool"` // 工作池配置
-	
+
 	// 内存优化配置
 	Memory MemoryConfig `json:"memory"` // 内存优化配置
+
+	// 并发控制配置
+	Concurrency ConcurrencyConfig `json:"concurrency"` // 并发控制配置
 }
 
 // 错误级别
@@ -1128,14 +1240,26 @@ var defaultConfig = Config{
 		Enabled:      true,
 	},
 	Memory: MemoryConfig{
-		MaxMemoryUsage:     512 * 1024 * 1024, // 512MB
-		GCThreshold:        256 * 1024 * 1024, // 256MB
-		StreamBufferSize:   1000,
-		ChunkSize:          100,
+		MaxMemoryUsage:      512 * 1024 * 1024, // 512MB
+		GCThreshold:         256 * 1024 * 1024, // 256MB
+		StreamBufferSize:    1000,
+		ChunkSize:           100,
 		MemoryCheckInterval: 5 * time.Second,
-		AutoGC:            true,
-		MemoryLimit:       1024 * 1024 * 1024, // 1GB
-		Enabled:           true,
+		AutoGC:              true,
+		MemoryLimit:         1024 * 1024 * 1024, // 1GB
+		Enabled:             true,
+	},
+	Concurrency: ConcurrencyConfig{
+		MaxConcurrency:        100,
+		BackpressureThreshold: 80,
+		LoadBalanceStrategy:   "round_robin",
+		AdaptiveScaling:       true,
+		ScaleUpThreshold:      0.8,
+		ScaleDownThreshold:    0.3,
+		MinWorkers:            2,
+		MaxWorkers:            20,
+		ScalingInterval:       30 * time.Second,
+		Enabled:               true,
 	},
 }
 
@@ -1159,6 +1283,9 @@ var workerPool *WorkerPool
 
 // 全局内存管理器
 var memoryManager *MemoryManager
+
+// 全局并发控制器
+var concurrencyController *ConcurrencyController
 
 // 批处理配置
 const (
@@ -1288,11 +1415,16 @@ var (
 	workerStats      = flag.Bool("worker-stats", false, "显示工作池统计信息")
 	workerTest       = flag.Bool("worker-test", false, "测试工作池功能")
 	performanceStats = flag.Bool("perf-stats", false, "显示性能指标")
-	
+
 	// 内存管理命令
-	memoryStats     = flag.Bool("memory-stats", false, "显示内存统计信息")
-	memoryTest      = flag.Bool("memory-test", false, "测试内存管理功能")
-	memoryGC        = flag.Bool("memory-gc", false, "强制垃圾回收")
+	memoryStats = flag.Bool("memory-stats", false, "显示内存统计信息")
+	memoryTest  = flag.Bool("memory-test", false, "测试内存管理功能")
+	memoryGC    = flag.Bool("memory-gc", false, "强制垃圾回收")
+	
+	// 并发控制命令
+	concurrencyStats = flag.Bool("concurrency-stats", false, "显示并发控制统计信息")
+	concurrencyTest  = flag.Bool("concurrency-test", false, "测试并发控制功能")
+	backpressureTest = flag.Bool("backpressure-test", false, "测试背压控制功能")
 
 	// journalctl 特定配置
 	journalServices = flag.String("journal-services", "", "监控的systemd服务列表，逗号分隔 (如: nginx,docker,postgresql)")
@@ -1490,19 +1622,34 @@ func main() {
 		handlePerformanceStats()
 		return
 	}
-	
+
 	if *memoryStats {
 		handleMemoryStats()
 		return
 	}
-	
+
 	if *memoryTest {
 		handleMemoryTest()
 		return
 	}
-	
+
 	if *memoryGC {
 		handleMemoryGC()
+		return
+	}
+	
+	if *concurrencyStats {
+		handleConcurrencyStats()
+		return
+	}
+	
+	if *concurrencyTest {
+		handleConcurrencyTest()
+		return
+	}
+	
+	if *backpressureTest {
+		handleBackpressureTest()
 		return
 	}
 
@@ -1919,6 +2066,9 @@ func loadConfig() error {
 
 	// 初始化内存管理器
 	memoryManager = NewMemoryManager(globalConfig.Memory)
+
+	// 初始化并发控制器
+	concurrencyController = NewConcurrencyController(globalConfig.Concurrency)
 
 	// 验证配置
 	validator := NewConfigValidator()
@@ -6146,19 +6296,19 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 		allocations: make(map[uintptr]int64),
 		lastGC:      time.Now(),
 	}
-	
+
 	// 创建流式处理器
 	mm.streamProcessor = &StreamProcessor{
 		BufferSize: config.StreamBufferSize,
 		ChunkSize:  config.ChunkSize,
 		Buffer:     make([]string, 0, config.StreamBufferSize),
 	}
-	
+
 	// 启动内存监控
 	if config.Enabled {
 		go mm.startMemoryMonitoring()
 	}
-	
+
 	return mm
 }
 
@@ -6166,7 +6316,7 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 func (mm *MemoryManager) startMemoryMonitoring() {
 	ticker := time.NewTicker(mm.config.MemoryCheckInterval)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		mm.checkMemoryUsage()
 	}
@@ -6176,10 +6326,10 @@ func (mm *MemoryManager) startMemoryMonitoring() {
 func (mm *MemoryManager) checkMemoryUsage() {
 	mm.mutex.Lock()
 	defer mm.mutex.Unlock()
-	
+
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	
+
 	// 更新统计信息
 	mm.stats.CurrentUsage = int64(m.Alloc)
 	mm.stats.HeapSize = int64(m.HeapSys)
@@ -6189,17 +6339,17 @@ func (mm *MemoryManager) checkMemoryUsage() {
 	mm.stats.AllocCount = int64(m.Mallocs)
 	mm.stats.FreeCount = int64(m.Frees)
 	mm.stats.LastGC = time.Unix(0, int64(m.LastGC))
-	
+
 	// 更新峰值使用量
 	if mm.stats.CurrentUsage > mm.stats.PeakUsage {
 		mm.stats.PeakUsage = mm.stats.CurrentUsage
 	}
-	
+
 	// 计算内存压力
 	if mm.config.MemoryLimit > 0 {
 		mm.stats.MemoryPressure = float64(mm.stats.CurrentUsage) / float64(mm.config.MemoryLimit)
 	}
-	
+
 	// 检查是否需要垃圾回收
 	if mm.config.AutoGC && mm.stats.CurrentUsage > mm.config.GCThreshold {
 		mm.forceGC()
@@ -6211,7 +6361,7 @@ func (mm *MemoryManager) forceGC() {
 	start := time.Now()
 	runtime.GC()
 	mm.lastGC = time.Now()
-	
+
 	// 更新统计
 	mm.stats.GCCount++
 	mm.stats.GCTime += int64(time.Since(start).Nanoseconds())
@@ -6221,10 +6371,10 @@ func (mm *MemoryManager) forceGC() {
 func (mm *MemoryManager) GetStats() MemoryStats {
 	// 更新当前统计
 	mm.checkMemoryUsage()
-	
+
 	mm.mutex.RLock()
 	defer mm.mutex.RUnlock()
-	
+
 	return mm.stats
 }
 
@@ -6232,23 +6382,23 @@ func (mm *MemoryManager) GetStats() MemoryStats {
 func (mm *MemoryManager) Allocate(size int64) uintptr {
 	mm.mutex.Lock()
 	defer mm.mutex.Unlock()
-	
+
 	// 检查内存限制
 	if mm.config.MemoryLimit > 0 && mm.stats.CurrentUsage+size > mm.config.MemoryLimit {
 		// 触发垃圾回收
 		mm.forceGC()
-		
+
 		// 如果仍然超限，返回0
 		if mm.stats.CurrentUsage+size > mm.config.MemoryLimit {
 			return 0
 		}
 	}
-	
+
 	// 分配内存（这里简化处理，实际应该使用内存池）
 	ptr := uintptr(0) // 简化实现
 	mm.allocations[ptr] = size
 	mm.stats.AllocCount++
-	
+
 	return ptr
 }
 
@@ -6256,7 +6406,7 @@ func (mm *MemoryManager) Allocate(size int64) uintptr {
 func (mm *MemoryManager) Free(ptr uintptr) {
 	mm.mutex.Lock()
 	defer mm.mutex.Unlock()
-	
+
 	if size, exists := mm.allocations[ptr]; exists {
 		delete(mm.allocations, ptr)
 		mm.stats.FreeCount++
@@ -6269,30 +6419,30 @@ func (mm *MemoryManager) ProcessStream(lines []string, processFunc func([]string
 	if !mm.config.Enabled {
 		return processFunc(lines)
 	}
-	
+
 	mm.streamProcessor.mutex.Lock()
 	defer mm.streamProcessor.mutex.Unlock()
-	
+
 	// 添加到缓冲区
 	mm.streamProcessor.Buffer = append(mm.streamProcessor.Buffer, lines...)
-	
+
 	// 检查是否需要处理
 	if len(mm.streamProcessor.Buffer) >= mm.streamProcessor.ChunkSize {
 		// 处理当前块
 		chunk := make([]string, mm.streamProcessor.ChunkSize)
 		copy(chunk, mm.streamProcessor.Buffer[:mm.streamProcessor.ChunkSize])
-		
+
 		// 移除已处理的部分
 		mm.streamProcessor.Buffer = mm.streamProcessor.Buffer[mm.streamProcessor.ChunkSize:]
-		
+
 		// 处理块
 		if err := processFunc(chunk); err != nil {
 			return err
 		}
-		
+
 		mm.streamProcessor.TotalProcessed += int64(len(chunk))
 	}
-	
+
 	return nil
 }
 
@@ -6300,35 +6450,35 @@ func (mm *MemoryManager) ProcessStream(lines []string, processFunc func([]string
 func (mm *MemoryManager) FlushBuffer() error {
 	mm.streamProcessor.mutex.Lock()
 	defer mm.streamProcessor.mutex.Unlock()
-	
+
 	if len(mm.streamProcessor.Buffer) > 0 {
 		// 处理剩余数据
 		if err := mm.streamProcessor.ProcessFunc(mm.streamProcessor.Buffer); err != nil {
 			return err
 		}
-		
+
 		mm.streamProcessor.TotalProcessed += int64(len(mm.streamProcessor.Buffer))
 		mm.streamProcessor.Buffer = mm.streamProcessor.Buffer[:0] // 清空缓冲区
 	}
-	
+
 	return nil
 }
 
 // 创建内存池
 func NewMemoryPool(chunkSize, maxChunks int) *MemoryPool {
 	mp := &MemoryPool{
-		chunkSize:  chunkSize,
-		maxChunks:  maxChunks,
+		chunkSize:   chunkSize,
+		maxChunks:   maxChunks,
 		allocations: make(map[uintptr]int64),
 	}
-	
+
 	// 初始化池
 	mp.pool = sync.Pool{
 		New: func() interface{} {
 			return make([]byte, chunkSize)
 		},
 	}
-	
+
 	return mp
 }
 
@@ -6336,11 +6486,11 @@ func NewMemoryPool(chunkSize, maxChunks int) *MemoryPool {
 func (mp *MemoryPool) Get() []byte {
 	mp.mutex.Lock()
 	defer mp.mutex.Unlock()
-	
+
 	if mp.currentChunks >= mp.maxChunks {
 		return nil // 池已满
 	}
-	
+
 	chunk := mp.pool.Get().([]byte)
 	mp.currentChunks++
 	return chunk
@@ -6350,7 +6500,7 @@ func (mp *MemoryPool) Get() []byte {
 func (mp *MemoryPool) Put(chunk []byte) {
 	mp.mutex.Lock()
 	defer mp.mutex.Unlock()
-	
+
 	if mp.currentChunks > 0 {
 		mp.pool.Put(chunk)
 		mp.currentChunks--
@@ -6369,7 +6519,7 @@ func NewMemoryAllocator(pool *MemoryPool) *MemoryAllocator {
 func (ma *MemoryAllocator) Allocate(size int64) []byte {
 	ma.mutex.Lock()
 	defer ma.mutex.Unlock()
-	
+
 	// 尝试从池中获取
 	if size <= int64(ma.pool.chunkSize) {
 		chunk := ma.pool.Get()
@@ -6380,13 +6530,13 @@ func (ma *MemoryAllocator) Allocate(size int64) []byte {
 			return chunk[:size]
 		}
 	}
-	
+
 	// 池中无法获取，直接分配
 	chunk := make([]byte, size)
 	ptr := uintptr(unsafe.Pointer(&chunk[0]))
 	ma.allocations[ptr] = size
 	ma.totalAllocated += size
-	
+
 	return chunk
 }
 
@@ -6394,12 +6544,12 @@ func (ma *MemoryAllocator) Allocate(size int64) []byte {
 func (ma *MemoryAllocator) Free(chunk []byte) {
 	ma.mutex.Lock()
 	defer ma.mutex.Unlock()
-	
+
 	ptr := uintptr(unsafe.Pointer(&chunk[0]))
 	if size, exists := ma.allocations[ptr]; exists {
 		delete(ma.allocations, ptr)
 		ma.totalAllocated -= size
-		
+
 		// 尝试返回到池中
 		ma.pool.Put(chunk)
 	}
@@ -6409,9 +6559,9 @@ func (ma *MemoryAllocator) Free(chunk []byte) {
 func (ma *MemoryAllocator) GetStats() map[string]int64 {
 	ma.mutex.RLock()
 	defer ma.mutex.RUnlock()
-	
+
 	return map[string]int64{
-		"total_allocated": ma.totalAllocated,
+		"total_allocated":    ma.totalAllocated,
 		"active_allocations": int64(len(ma.allocations)),
 	}
 }
@@ -6422,13 +6572,13 @@ func (ma *MemoryAllocator) GetStats() map[string]int64 {
 func handleMemoryStats() {
 	fmt.Println("🧠 内存统计信息:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	stats := memoryManager.GetStats()
 	fmt.Printf("当前内存使用: %.2f MB\n", float64(stats.CurrentUsage)/(1024*1024))
 	fmt.Printf("峰值内存使用: %.2f MB\n", float64(stats.PeakUsage)/(1024*1024))
@@ -6440,7 +6590,7 @@ func handleMemoryStats() {
 	fmt.Printf("释放次数: %d\n", stats.FreeCount)
 	fmt.Printf("上次垃圾回收: %v\n", stats.LastGC.Format("2006-01-02 15:04:05"))
 	fmt.Printf("内存压力: %.2f%%\n", stats.MemoryPressure*100)
-	
+
 	// 显示配置信息
 	fmt.Println("\n内存配置:")
 	fmt.Printf("  最大内存使用: %.2f MB\n", float64(globalConfig.Memory.MaxMemoryUsage)/(1024*1024))
@@ -6457,13 +6607,13 @@ func handleMemoryStats() {
 func handleMemoryTest() {
 	fmt.Println("🧪 测试内存管理功能...")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 测试内存分配
 	fmt.Println("1. 测试内存分配...")
 	ptr1 := memoryManager.Allocate(1024 * 1024) // 1MB
@@ -6472,14 +6622,14 @@ func handleMemoryTest() {
 	} else {
 		fmt.Println("   ❌ 1MB内存分配失败")
 	}
-	
+
 	ptr2 := memoryManager.Allocate(2 * 1024 * 1024) // 2MB
 	if ptr2 != 0 {
 		fmt.Println("   ✅ 2MB内存分配成功")
 	} else {
 		fmt.Println("   ❌ 2MB内存分配失败")
 	}
-	
+
 	// 测试流式处理
 	fmt.Println("2. 测试流式处理...")
 	testLines := []string{
@@ -6487,18 +6637,18 @@ func handleMemoryTest() {
 		"2024-01-01 10:00:01 [ERROR] Test log line 2",
 		"2024-01-01 10:00:02 [WARN] Test log line 3",
 	}
-	
+
 	processFunc := func(lines []string) error {
 		fmt.Printf("   📝 处理了 %d 行日志\n", len(lines))
 		return nil
 	}
-	
+
 	if err := memoryManager.ProcessStream(testLines, processFunc); err != nil {
 		fmt.Printf("   ❌ 流式处理失败: %v\n", err)
 	} else {
 		fmt.Println("   ✅ 流式处理成功")
 	}
-	
+
 	// 测试内存池
 	fmt.Println("3. 测试内存池...")
 	pool := NewMemoryPool(1024, 10)
@@ -6510,7 +6660,7 @@ func handleMemoryTest() {
 	} else {
 		fmt.Println("   ❌ 从内存池获取内存块失败")
 	}
-	
+
 	// 测试内存分配器
 	fmt.Println("4. 测试内存分配器...")
 	allocator := NewMemoryAllocator(pool)
@@ -6522,7 +6672,7 @@ func handleMemoryTest() {
 	} else {
 		fmt.Println("   ❌ 内存分配器分配失败")
 	}
-	
+
 	// 释放测试内存
 	if ptr1 != 0 {
 		memoryManager.Free(ptr1)
@@ -6530,7 +6680,7 @@ func handleMemoryTest() {
 	if ptr2 != 0 {
 		memoryManager.Free(ptr2)
 	}
-	
+
 	// 显示最终统计
 	fmt.Println("\n最终内存统计:")
 	stats := memoryManager.GetStats()
@@ -6538,13 +6688,451 @@ func handleMemoryTest() {
 	fmt.Printf("  分配次数: %d\n", stats.AllocCount)
 	fmt.Printf("  释放次数: %d\n", stats.FreeCount)
 	fmt.Printf("  内存压力: %.2f%%\n", stats.MemoryPressure*100)
-	
+
 	fmt.Println("\n✅ 内存管理功能测试完成")
 }
 
 // 强制垃圾回收
 func handleMemoryGC() {
 	fmt.Println("🗑️  强制垃圾回收...")
+
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 获取回收前统计
+	statsBefore := memoryManager.GetStats()
+	fmt.Printf("回收前内存使用: %.2f MB\n", float64(statsBefore.CurrentUsage)/(1024*1024))
+
+	// 强制垃圾回收
+	start := time.Now()
+	runtime.GC()
+	runtime.GC() // 执行两次确保完全回收
+	elapsed := time.Since(start)
+
+	// 获取回收后统计
+	statsAfter := memoryManager.GetStats()
+	fmt.Printf("回收后内存使用: %.2f MB\n", float64(statsAfter.CurrentUsage)/(1024*1024))
+	fmt.Printf("回收时间: %v\n", elapsed)
+	fmt.Printf("释放内存: %.2f MB\n", float64(statsBefore.CurrentUsage-statsAfter.CurrentUsage)/(1024*1024))
+
+	fmt.Println("✅ 垃圾回收完成")
+}
+
+// 并发控制器方法
+
+// 创建新的并发控制器
+func NewConcurrencyController(config ConcurrencyConfig) *ConcurrencyController {
+	cc := &ConcurrencyController{
+		config:   config,
+		stopChan: make(chan bool),
+	}
+
+	// 创建背压控制器
+	cc.backpressure = &BackpressureController{
+		threshold: config.BackpressureThreshold,
+		callbacks: make([]func(int64), 0),
+	}
+
+	// 创建负载均衡器
+	cc.loadBalancer = &LoadBalancer{
+		strategy:    config.LoadBalanceStrategy,
+		workers:     make([]*Worker, 0),
+		workerStats: make(map[int]*WorkerStats),
+	}
+
+	// 创建自适应扩缩容器
+	cc.adaptiveScaler = &AdaptiveScaler{
+		config:      config,
+		workerStats: make(map[int]*WorkerStats),
+	}
+
+	// 启动自适应扩缩容
+	if config.Enabled && config.AdaptiveScaling {
+		go cc.startAdaptiveScaling()
+	}
+
+	return cc
+}
+
+// 启动自适应扩缩容
+func (cc *ConcurrencyController) startAdaptiveScaling() {
+	ticker := time.NewTicker(cc.config.ScalingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			cc.checkAndScale()
+		case <-cc.stopChan:
+			return
+		}
+	}
+}
+
+// 检查并执行扩缩容
+func (cc *ConcurrencyController) checkAndScale() {
+	cc.mutex.Lock()
+	defer cc.mutex.Unlock()
+
+	// 计算当前负载
+	currentLoad := cc.calculateCurrentLoad()
+
+	// 检查是否需要扩容
+	if currentLoad > cc.config.ScaleUpThreshold && cc.adaptiveScaler.currentWorkers < cc.config.MaxWorkers {
+		cc.scaleUp()
+	}
+
+	// 检查是否需要缩容
+	if currentLoad < cc.config.ScaleDownThreshold && cc.adaptiveScaler.currentWorkers > cc.config.MinWorkers {
+		cc.scaleDown()
+	}
+}
+
+// 计算当前负载
+func (cc *ConcurrencyController) calculateCurrentLoad() float64 {
+	if cc.adaptiveScaler.currentWorkers == 0 {
+		return 0
+	}
+
+	totalLoad := int64(0)
+	for _, stats := range cc.adaptiveScaler.workerStats {
+		totalLoad += stats.CurrentLoad
+	}
+
+	return float64(totalLoad) / float64(cc.adaptiveScaler.currentWorkers)
+}
+
+// 扩容
+func (cc *ConcurrencyController) scaleUp() {
+	if cc.adaptiveScaler.currentWorkers >= cc.config.MaxWorkers {
+		return
+	}
+
+	// 创建新的工作协程
+	newWorker := NewWorker(cc.adaptiveScaler.currentWorkers, workerPool)
+	cc.loadBalancer.workers = append(cc.loadBalancer.workers, newWorker)
+	cc.adaptiveScaler.currentWorkers++
+
+	// 启动工作协程
+	newWorker.Start()
+
+	// 更新统计
+	cc.adaptiveScaler.workerStats[newWorker.ID] = &WorkerStats{
+		ID:           newWorker.ID,
+		LastActivity: time.Now(),
+		IsHealthy:    true,
+	}
+
+	cc.adaptiveScaler.lastScaleTime = time.Now()
+}
+
+// 缩容
+func (cc *ConcurrencyController) scaleDown() {
+	if cc.adaptiveScaler.currentWorkers <= cc.config.MinWorkers {
+		return
+	}
+
+	// 找到负载最低的工作协程
+	var targetWorker *Worker
+	minLoad := int64(^uint64(0) >> 1)
+
+	for _, worker := range cc.loadBalancer.workers {
+		if stats, exists := cc.adaptiveScaler.workerStats[worker.ID]; exists {
+			if stats.CurrentLoad < minLoad {
+				minLoad = stats.CurrentLoad
+				targetWorker = worker
+			}
+		}
+	}
+
+	if targetWorker != nil {
+		// 停止工作协程
+		targetWorker.Stop()
+
+		// 从负载均衡器中移除
+		for i, worker := range cc.loadBalancer.workers {
+			if worker.ID == targetWorker.ID {
+				cc.loadBalancer.workers = append(cc.loadBalancer.workers[:i], cc.loadBalancer.workers[i+1:]...)
+				break
+			}
+		}
+
+		// 更新统计
+		delete(cc.adaptiveScaler.workerStats, targetWorker.ID)
+		cc.adaptiveScaler.currentWorkers--
+		cc.adaptiveScaler.lastScaleTime = time.Now()
+	}
+}
+
+// 创建背压控制器
+func NewBackpressureController(threshold int) *BackpressureController {
+	return &BackpressureController{
+		threshold: threshold,
+		callbacks: make([]func(int64), 0),
+	}
+}
+
+// 检查背压
+func (bc *BackpressureController) CheckBackpressure() bool {
+	bc.mutex.RLock()
+	defer bc.mutex.RUnlock()
+
+	return int(bc.currentLoad) >= bc.threshold
+}
+
+// 增加负载
+func (bc *BackpressureController) AddLoad(load int64) {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	bc.currentLoad += load
+
+	// 检查是否触发背压
+	if int(bc.currentLoad) >= bc.threshold {
+		bc.blockedCount++
+		// 触发回调
+		for _, callback := range bc.callbacks {
+			callback(bc.currentLoad)
+		}
+	}
+}
+
+// 减少负载
+func (bc *BackpressureController) RemoveLoad(load int64) {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	bc.currentLoad -= load
+	if bc.currentLoad < 0 {
+		bc.currentLoad = 0
+	}
+}
+
+// 拒绝任务
+func (bc *BackpressureController) RejectTask() {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	bc.rejectedCount++
+}
+
+// 添加背压回调
+func (bc *BackpressureController) AddCallback(callback func(int64)) {
+	bc.mutex.Lock()
+	defer bc.mutex.Unlock()
+
+	bc.callbacks = append(bc.callbacks, callback)
+}
+
+// 创建负载均衡器
+func NewLoadBalancer(strategy string) *LoadBalancer {
+	return &LoadBalancer{
+		strategy:    strategy,
+		workers:     make([]*Worker, 0),
+		workerStats: make(map[int]*WorkerStats),
+	}
+}
+
+// 选择工作协程
+func (lb *LoadBalancer) SelectWorker() *Worker {
+	lb.mutex.RLock()
+	defer lb.mutex.RUnlock()
+
+	if len(lb.workers) == 0 {
+		return nil
+	}
+
+	switch lb.strategy {
+	case "round_robin":
+		return lb.selectRoundRobin()
+	case "least_loaded":
+		return lb.selectLeastLoaded()
+	case "random":
+		return lb.selectRandom()
+	default:
+		return lb.selectRoundRobin()
+	}
+}
+
+// 轮询选择
+func (lb *LoadBalancer) selectRoundRobin() *Worker {
+	if len(lb.workers) == 0 {
+		return nil
+	}
+
+	worker := lb.workers[lb.currentIndex]
+	lb.currentIndex = (lb.currentIndex + 1) % len(lb.workers)
+	return worker
+}
+
+// 选择负载最低的工作协程
+func (lb *LoadBalancer) selectLeastLoaded() *Worker {
+	if len(lb.workers) == 0 {
+		return nil
+	}
+
+	var selectedWorker *Worker
+	minLoad := int64(^uint64(0) >> 1)
+
+	for _, worker := range lb.workers {
+		if stats, exists := lb.workerStats[worker.ID]; exists {
+			if stats.CurrentLoad < minLoad {
+				minLoad = stats.CurrentLoad
+				selectedWorker = worker
+			}
+		}
+	}
+
+	if selectedWorker == nil {
+		return lb.workers[0]
+	}
+
+	return selectedWorker
+}
+
+// 随机选择
+func (lb *LoadBalancer) selectRandom() *Worker {
+	if len(lb.workers) == 0 {
+		return nil
+	}
+
+	index := rand.Intn(len(lb.workers))
+	return lb.workers[index]
+}
+
+// 更新工作协程统计
+func (lb *LoadBalancer) UpdateWorkerStats(workerID int, stats *WorkerStats) {
+	lb.mutex.Lock()
+	defer lb.mutex.Unlock()
+
+	lb.workerStats[workerID] = stats
+}
+
+// 创建优先级队列
+func NewPriorityQueue() *PriorityQueue {
+	return &PriorityQueue{
+		jobs:       make([]ProcessingJob, 0),
+		priorities: make(map[string]TaskPriority),
+	}
+}
+
+// 添加任务
+func (pq *PriorityQueue) AddJob(job ProcessingJob, priority TaskPriority) {
+	pq.mutex.Lock()
+	defer pq.mutex.Unlock()
+
+	pq.priorities[job.ID] = priority
+	pq.jobs = append(pq.jobs, job)
+
+	// 按优先级排序
+	pq.sortByPriority()
+}
+
+// 获取下一个任务
+func (pq *PriorityQueue) GetNextJob() *ProcessingJob {
+	pq.mutex.Lock()
+	defer pq.mutex.Unlock()
+
+	if len(pq.jobs) == 0 {
+		return nil
+	}
+
+	job := pq.jobs[0]
+	pq.jobs = pq.jobs[1:]
+	delete(pq.priorities, job.ID)
+
+	return &job
+}
+
+// 按优先级排序
+func (pq *PriorityQueue) sortByPriority() {
+	sort.Slice(pq.jobs, func(i, j int) bool {
+		priorityI := pq.priorities[pq.jobs[i].ID]
+		priorityJ := pq.priorities[pq.jobs[j].ID]
+		return priorityI > priorityJ // 高优先级在前
+	})
+}
+
+// 获取队列长度
+func (pq *PriorityQueue) Length() int {
+	pq.mutex.RLock()
+	defer pq.mutex.RUnlock()
+
+	return len(pq.jobs)
+}
+
+// 创建任务调度器
+func NewTaskScheduler(workers []*Worker, loadBalancer *LoadBalancer) *TaskScheduler {
+	return &TaskScheduler{
+		priorityQueue: NewPriorityQueue(),
+		workers:       workers,
+		loadBalancer:  loadBalancer,
+	}
+}
+
+// 提交任务
+func (ts *TaskScheduler) SubmitTask(job ProcessingJob, priority TaskPriority) error {
+	ts.mutex.Lock()
+	defer ts.mutex.Unlock()
+
+	// 检查是否有可用的工作协程
+	if len(ts.workers) == 0 {
+		return fmt.Errorf("没有可用的工作协程")
+	}
+
+	// 添加到优先级队列
+	ts.priorityQueue.AddJob(job, priority)
+
+	// 尝试立即分配任务
+	ts.tryAssignTask()
+
+	return nil
+}
+
+// 尝试分配任务
+func (ts *TaskScheduler) tryAssignTask() {
+	// 获取下一个任务
+	job := ts.priorityQueue.GetNextJob()
+	if job == nil {
+		return
+	}
+
+	// 选择工作协程
+	worker := ts.loadBalancer.SelectWorker()
+	if worker == nil {
+		// 没有可用工作协程，将任务放回队列
+		ts.priorityQueue.AddJob(*job, ts.priorityQueue.priorities[job.ID])
+		return
+	}
+
+	// 分配任务
+	select {
+	case worker.JobChannel <- *job:
+		// 任务分配成功
+		ts.stats.TotalJobs++
+	default:
+		// 工作协程忙，将任务放回队列
+		ts.priorityQueue.AddJob(*job, ts.priorityQueue.priorities[job.ID])
+	}
+}
+
+// 获取统计信息
+func (ts *TaskScheduler) GetStats() ConcurrencyStats {
+	ts.mutex.RLock()
+	defer ts.mutex.RUnlock()
+
+	return ts.stats
+}
+
+// 并发控制命令处理函数
+
+// 显示并发控制统计信息
+func handleConcurrencyStats() {
+	fmt.Println("⚡ 并发控制统计信息:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	
 	// 加载配置
 	if err := loadConfig(); err != nil {
@@ -6552,21 +7140,163 @@ func handleMemoryGC() {
 		os.Exit(1)
 	}
 	
-	// 获取回收前统计
-	statsBefore := memoryManager.GetStats()
-	fmt.Printf("回收前内存使用: %.2f MB\n", float64(statsBefore.CurrentUsage)/(1024*1024))
+	stats := concurrencyController.stats
+	fmt.Printf("总任务数: %d\n", stats.TotalJobs)
+	fmt.Printf("已处理任务数: %d\n", stats.ProcessedJobs)
+	fmt.Printf("活跃工作协程数: %d\n", stats.ActiveWorkers)
+	fmt.Printf("阻塞任务数: %d\n", stats.BlockedJobs)
+	fmt.Printf("拒绝任务数: %d\n", stats.RejectedJobs)
+	fmt.Printf("平均延迟: %v\n", stats.AverageLatency)
+	fmt.Printf("吞吐量: %.2f 任务/秒\n", stats.Throughput)
+	fmt.Printf("错误率: %.2f%%\n", stats.ErrorRate)
+	fmt.Printf("背压率: %.2f%%\n", stats.BackpressureRate)
 	
-	// 强制垃圾回收
-	start := time.Now()
-	runtime.GC()
-	runtime.GC() // 执行两次确保完全回收
-	elapsed := time.Since(start)
+	// 显示配置信息
+	fmt.Println("\n并发控制配置:")
+	fmt.Printf("  最大并发数: %d\n", globalConfig.Concurrency.MaxConcurrency)
+	fmt.Printf("  背压阈值: %d\n", globalConfig.Concurrency.BackpressureThreshold)
+	fmt.Printf("  负载均衡策略: %s\n", globalConfig.Concurrency.LoadBalanceStrategy)
+	fmt.Printf("  自适应扩缩容: %t\n", globalConfig.Concurrency.AdaptiveScaling)
+	fmt.Printf("  扩容阈值: %.2f\n", globalConfig.Concurrency.ScaleUpThreshold)
+	fmt.Printf("  缩容阈值: %.2f\n", globalConfig.Concurrency.ScaleDownThreshold)
+	fmt.Printf("  最小工作协程数: %d\n", globalConfig.Concurrency.MinWorkers)
+	fmt.Printf("  最大工作协程数: %d\n", globalConfig.Concurrency.MaxWorkers)
+	fmt.Printf("  扩缩容检查间隔: %v\n", globalConfig.Concurrency.ScalingInterval)
+	fmt.Printf("  启用状态: %t\n", globalConfig.Concurrency.Enabled)
+}
+
+// 测试并发控制功能
+func handleConcurrencyTest() {
+	fmt.Println("🧪 测试并发控制功能...")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	
-	// 获取回收后统计
-	statsAfter := memoryManager.GetStats()
-	fmt.Printf("回收后内存使用: %.2f MB\n", float64(statsAfter.CurrentUsage)/(1024*1024))
-	fmt.Printf("回收时间: %v\n", elapsed)
-	fmt.Printf("释放内存: %.2f MB\n", float64(statsBefore.CurrentUsage-statsAfter.CurrentUsage)/(1024*1024))
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
 	
-	fmt.Println("✅ 垃圾回收完成")
+	// 测试负载均衡器
+	fmt.Println("1. 测试负载均衡器...")
+	loadBalancer := NewLoadBalancer("round_robin")
+	
+	// 创建测试工作协程
+	testWorkers := make([]*Worker, 3)
+	for i := 0; i < 3; i++ {
+		worker := NewWorker(i, workerPool)
+		testWorkers[i] = worker
+		loadBalancer.workers = append(loadBalancer.workers, worker)
+	}
+	
+	// 测试轮询选择
+	for i := 0; i < 6; i++ {
+		worker := loadBalancer.SelectWorker()
+		if worker != nil {
+			fmt.Printf("   ✅ 轮询选择工作协程 %d\n", worker.ID)
+		} else {
+			fmt.Println("   ❌ 轮询选择失败")
+		}
+	}
+	
+	// 测试优先级队列
+	fmt.Println("2. 测试优先级队列...")
+	priorityQueue := NewPriorityQueue()
+	
+	// 添加不同优先级的任务
+	jobs := []ProcessingJob{
+		{ID: "job1", Lines: []string{"test1"}, Priority: 1},
+		{ID: "job2", Lines: []string{"test2"}, Priority: 3},
+		{ID: "job3", Lines: []string{"test3"}, Priority: 2},
+	}
+	
+	for i, job := range jobs {
+		priority := TaskPriority(i + 1)
+		priorityQueue.AddJob(job, priority)
+		fmt.Printf("   ✅ 添加任务 %s (优先级 %d)\n", job.ID, priority)
+	}
+	
+	// 按优先级获取任务
+	for i := 0; i < 3; i++ {
+		job := priorityQueue.GetNextJob()
+		if job != nil {
+			fmt.Printf("   ✅ 获取任务 %s\n", job.ID)
+		} else {
+			fmt.Println("   ❌ 获取任务失败")
+		}
+	}
+	
+	// 测试任务调度器
+	fmt.Println("3. 测试任务调度器...")
+	scheduler := NewTaskScheduler(testWorkers, loadBalancer)
+	
+	// 提交任务
+	testJob := ProcessingJob{
+		ID:     "test_job",
+		Lines:  []string{"test line"},
+		Format: "java",
+	}
+	
+	if err := scheduler.SubmitTask(testJob, PriorityHigh); err != nil {
+		fmt.Printf("   ❌ 任务提交失败: %v\n", err)
+	} else {
+		fmt.Println("   ✅ 任务提交成功")
+	}
+	
+	// 显示统计
+	stats := scheduler.GetStats()
+	fmt.Printf("  总任务数: %d\n", stats.TotalJobs)
+	
+	fmt.Println("\n✅ 并发控制功能测试完成")
+}
+
+// 测试背压控制功能
+func handleBackpressureTest() {
+	fmt.Println("🔄 测试背压控制功能...")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 创建背压控制器
+	backpressure := NewBackpressureController(5)
+	
+	// 添加回调
+	backpressure.AddCallback(func(load int64) {
+		fmt.Printf("   ⚠️  背压触发，当前负载: %d\n", load)
+	})
+	
+	// 测试正常负载
+	fmt.Println("1. 测试正常负载...")
+	for i := 0; i < 3; i++ {
+		backpressure.AddLoad(1)
+		fmt.Printf("   ✅ 添加负载 %d，当前负载: %d\n", i+1, backpressure.currentLoad)
+	}
+	
+	// 测试背压触发
+	fmt.Println("2. 测试背压触发...")
+	for i := 0; i < 5; i++ {
+		backpressure.AddLoad(1)
+		fmt.Printf("   📊 添加负载 %d，当前负载: %d，背压状态: %t\n", 
+			i+4, backpressure.currentLoad, backpressure.CheckBackpressure())
+	}
+	
+	// 测试负载减少
+	fmt.Println("3. 测试负载减少...")
+	for i := 0; i < 3; i++ {
+		backpressure.RemoveLoad(1)
+		fmt.Printf("   ✅ 减少负载 %d，当前负载: %d，背压状态: %t\n", 
+			i+1, backpressure.currentLoad, backpressure.CheckBackpressure())
+	}
+	
+	// 测试任务拒绝
+	fmt.Println("4. 测试任务拒绝...")
+	for i := 0; i < 3; i++ {
+		backpressure.RejectTask()
+		fmt.Printf("   ❌ 拒绝任务 %d\n", i+1)
+	}
+	
+	fmt.Println("\n✅ 背压控制功能测试完成")
 }
