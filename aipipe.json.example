@@ -34,6 +34,63 @@
     }
   ],
   "default_ai": "openai",
+  "rules": [
+    {
+      "id": "debug_logs",
+      "name": "调试日志过滤",
+      "pattern": ".*\\[DEBUG\\].*",
+      "action": "ignore",
+      "priority": 1,
+      "description": "过滤掉所有DEBUG级别的日志",
+      "enabled": true,
+      "category": "log_level",
+      "color": ""
+    },
+    {
+      "id": "error_alerts",
+      "name": "错误告警",
+      "pattern": ".*\\[ERROR\\].*|.*Exception.*|.*Error.*",
+      "action": "alert",
+      "priority": 2,
+      "description": "标记错误日志为告警",
+      "enabled": true,
+      "category": "error",
+      "color": "red"
+    },
+    {
+      "id": "database_errors",
+      "name": "数据库错误高亮",
+      "pattern": ".*(database|db|mysql|postgres|mongodb).*error.*",
+      "action": "highlight",
+      "priority": 3,
+      "description": "高亮显示数据库相关错误",
+      "enabled": true,
+      "category": "database",
+      "color": "yellow"
+    },
+    {
+      "id": "security_events",
+      "name": "安全事件告警",
+      "pattern": ".*(security|auth|login|permission|access).*",
+      "action": "alert",
+      "priority": 4,
+      "description": "标记安全相关事件为告警",
+      "enabled": true,
+      "category": "security",
+      "color": "magenta"
+    },
+    {
+      "id": "performance_warnings",
+      "name": "性能警告",
+      "pattern": ".*(slow|timeout|latency|performance).*",
+      "action": "highlight",
+      "priority": 5,
+      "description": "高亮显示性能相关警告",
+      "enabled": true,
+      "category": "performance",
+      "color": "orange"
+    }
+  ],
   "notifiers": {
     "email": {
       "enabled": false,

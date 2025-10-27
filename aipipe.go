@@ -59,12 +59,12 @@ type NotifierConfig struct {
 
 // AI 服务配置
 type AIService struct {
-	Name     string `json:"name"`      // 服务名称
-	Endpoint string `json:"endpoint"`  // API 端点
-	Token    string `json:"token"`     // API Token
-	Model    string `json:"model"`     // 模型名称
-	Priority int    `json:"priority"`  // 优先级（数字越小优先级越高）
-	Enabled  bool   `json:"enabled"`   // 是否启用
+	Name     string `json:"name"`     // 服务名称
+	Endpoint string `json:"endpoint"` // API 端点
+	Token    string `json:"token"`    // API Token
+	Model    string `json:"model"`    // 模型名称
+	Priority int    `json:"priority"` // 优先级（数字越小优先级越高）
+	Enabled  bool   `json:"enabled"`  // 是否启用
 }
 
 // AI 服务管理器
@@ -76,23 +76,73 @@ type AIServiceManager struct {
 	mutex       sync.RWMutex
 }
 
+// 过滤规则
+type FilterRule struct {
+	ID          string `json:"id"`          // 规则ID
+	Name        string `json:"name"`        // 规则名称
+	Pattern     string `json:"pattern"`     // 正则表达式模式
+	Action      string `json:"action"`      // 动作: filter, alert, ignore, highlight
+	Priority    int    `json:"priority"`    // 优先级（数字越小优先级越高）
+	Description string `json:"description"` // 规则描述
+	Enabled     bool   `json:"enabled"`     // 是否启用
+	Category    string `json:"category"`    // 规则分类
+	Color       string `json:"color"`       // 高亮颜色
+}
+
+// 规则引擎
+type RuleEngine struct {
+	rules       []FilterRule
+	compiledRules map[string]*regexp.Regexp
+	cache       map[string]bool
+	mutex       sync.RWMutex
+	stats       RuleStats
+}
+
+// 规则统计
+type RuleStats struct {
+	TotalRules     int `json:"total_rules"`
+	EnabledRules   int `json:"enabled_rules"`
+	CacheHits      int `json:"cache_hits"`
+	CacheMisses    int `json:"cache_misses"`
+	FilteredLines  int `json:"filtered_lines"`
+	AlertedLines   int `json:"alerted_lines"`
+	IgnoredLines   int `json:"ignored_lines"`
+	HighlightedLines int `json:"highlighted_lines"`
+}
+
+// 过滤结果
+type FilterResult struct {
+	Action      string `json:"action"`      // 动作
+	RuleID      string `json:"rule_id"`     // 匹配的规则ID
+	RuleName    string `json:"rule_name"`   // 规则名称
+	Category    string `json:"category"`    // 分类
+	Color       string `json:"color"`       // 颜色
+	ShouldProcess bool `json:"should_process"` // 是否应该处理
+	ShouldAlert   bool `json:"should_alert"`   // 是否应该告警
+	ShouldIgnore  bool `json:"should_ignore"`  // 是否应该忽略
+	ShouldHighlight bool `json:"should_highlight"` // 是否应该高亮
+}
+
 // 配置文件结构
 type Config struct {
-	AIEndpoint   string         `json:"ai_endpoint"`   // 向后兼容
-	Token        string         `json:"token"`         // 向后兼容
-	Model        string         `json:"model"`         // 向后兼容
+	AIEndpoint   string         `json:"ai_endpoint"` // 向后兼容
+	Token        string         `json:"token"`       // 向后兼容
+	Model        string         `json:"model"`       // 向后兼容
 	CustomPrompt string         `json:"custom_prompt"`
 	Notifiers    NotifierConfig `json:"notifiers"`
-	
+
 	// 新增配置项
-	MaxRetries   int  `json:"max_retries"`   // API 重试次数
-	Timeout      int  `json:"timeout"`       // 请求超时时间（秒）
-	RateLimit    int  `json:"rate_limit"`    // 请求频率限制（每分钟）
-	LocalFilter  bool `json:"local_filter"`  // 是否启用本地过滤
-	
+	MaxRetries  int  `json:"max_retries"`  // API 重试次数
+	Timeout     int  `json:"timeout"`      // 请求超时时间（秒）
+	RateLimit   int  `json:"rate_limit"`   // 请求频率限制（每分钟）
+	LocalFilter bool `json:"local_filter"` // 是否启用本地过滤
+
 	// 多AI服务支持
 	AIServices []AIService `json:"ai_services"` // AI 服务列表
 	DefaultAI  string      `json:"default_ai"`  // 默认AI服务名称
+	
+	// 规则引擎配置
+	Rules []FilterRule `json:"rules"` // 过滤规则列表
 }
 
 // 错误级别
@@ -119,14 +169,14 @@ const (
 
 // AIPipe 错误结构
 type AIPipeError struct {
-	Code        string                 `json:"code"`
-	Category    ErrorCategory          `json:"category"`
-	Level       ErrorLevel             `json:"level"`
-	Message     string                 `json:"message"`
-	Suggestion  string                 `json:"suggestion"`
-	Context     map[string]interface{} `json:"context"`
-	Timestamp   time.Time              `json:"timestamp"`
-	StackTrace  string                 `json:"stack_trace"`
+	Code       string                 `json:"code"`
+	Category   ErrorCategory          `json:"category"`
+	Level      ErrorLevel             `json:"level"`
+	Message    string                 `json:"message"`
+	Suggestion string                 `json:"suggestion"`
+	Context    map[string]interface{} `json:"context"`
+	Timestamp  time.Time              `json:"timestamp"`
+	StackTrace string                 `json:"stack_trace"`
 }
 
 func (e *AIPipeError) Error() string {
@@ -223,13 +273,13 @@ func (eh *ErrorHandler) Handle(err error, context map[string]interface{}) error 
 		Timestamp:  time.Now(),
 		StackTrace: getStackTrace(),
 	}
-	
+
 	// 根据错误类型设置分类和级别
 	eh.classifyError(aipipeErr)
-	
+
 	// 记录错误
 	eh.logError(aipipeErr)
-	
+
 	// 尝试恢复
 	if strategy, exists := eh.recovery.strategies[aipipeErr.Category]; exists {
 		if strategy.CanRecover(err) {
@@ -241,13 +291,13 @@ func (eh *ErrorHandler) Handle(err error, context map[string]interface{}) error 
 			}
 		}
 	}
-	
+
 	return aipipeErr
 }
 
 func (eh *ErrorHandler) classifyError(err *AIPipeError) {
 	errMsg := strings.ToLower(err.Message)
-	
+
 	// 网络错误
 	if strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "connection") {
 		err.Category = ErrorCategoryNetwork
@@ -255,7 +305,7 @@ func (eh *ErrorHandler) classifyError(err *AIPipeError) {
 		err.Code = "NETWORK_ERROR"
 		err.Suggestion = "检查网络连接和服务器状态"
 	}
-	
+
 	// AI 服务错误
 	if strings.Contains(errMsg, "api") || strings.Contains(errMsg, "ai") {
 		err.Category = ErrorCategoryAI
@@ -263,7 +313,7 @@ func (eh *ErrorHandler) classifyError(err *AIPipeError) {
 		err.Code = "AI_SERVICE_ERROR"
 		err.Suggestion = "检查 AI 服务配置和 Token 有效性"
 	}
-	
+
 	// 配置错误
 	if strings.Contains(errMsg, "config") || strings.Contains(errMsg, "配置文件") {
 		err.Category = ErrorCategoryConfig
@@ -271,7 +321,7 @@ func (eh *ErrorHandler) classifyError(err *AIPipeError) {
 		err.Code = "CONFIG_ERROR"
 		err.Suggestion = "检查配置文件格式和内容"
 	}
-	
+
 	// 文件错误
 	if strings.Contains(errMsg, "file") || strings.Contains(errMsg, "文件") {
 		err.Category = ErrorCategoryFile
@@ -285,14 +335,14 @@ func (eh *ErrorHandler) logError(err *AIPipeError) {
 	if eh.logger == nil {
 		return // 如果 logger 为 nil，不输出日志
 	}
-	
+
 	levelStr := []string{"INFO", "WARNING", "ERROR", "CRITICAL"}[err.Level]
 	eh.logger.Printf("[%s] %s: %s", levelStr, err.Category, err.Message)
-	
+
 	if err.Suggestion != "" {
 		eh.logger.Printf("建议: %s", err.Suggestion)
 	}
-	
+
 	if *debug {
 		eh.logger.Printf("上下文: %+v", err.Context)
 		eh.logger.Printf("堆栈跟踪: %s", err.StackTrace)
@@ -312,7 +362,7 @@ func NewAIServiceManager(services []AIService) *AIServiceManager {
 	// 按优先级排序
 	sortedServices := make([]AIService, len(services))
 	copy(sortedServices, services)
-	
+
 	// 简单的冒泡排序按优先级排序
 	for i := 0; i < len(sortedServices)-1; i++ {
 		for j := 0; j < len(sortedServices)-i-1; j++ {
@@ -321,7 +371,7 @@ func NewAIServiceManager(services []AIService) *AIServiceManager {
 			}
 		}
 	}
-	
+
 	return &AIServiceManager{
 		services:    sortedServices,
 		current:     0,
@@ -334,7 +384,7 @@ func NewAIServiceManager(services []AIService) *AIServiceManager {
 func (asm *AIServiceManager) GetNextService() (*AIService, error) {
 	asm.mutex.Lock()
 	defer asm.mutex.Unlock()
-	
+
 	// 查找启用的服务
 	for i := 0; i < len(asm.services); i++ {
 		service := &asm.services[asm.current]
@@ -344,14 +394,14 @@ func (asm *AIServiceManager) GetNextService() (*AIService, error) {
 				asm.current = (asm.current + 1) % len(asm.services)
 				continue
 			}
-			
+
 			// 更新当前索引
 			asm.current = (asm.current + 1) % len(asm.services)
 			return service, nil
 		}
 		asm.current = (asm.current + 1) % len(asm.services)
 	}
-	
+
 	return nil, fmt.Errorf("没有可用的AI服务")
 }
 
@@ -377,20 +427,20 @@ func (asm *AIServiceManager) RecordCall(serviceName string) {
 func (asm *AIServiceManager) GetStats() map[string]interface{} {
 	asm.mutex.RLock()
 	defer asm.mutex.RUnlock()
-	
+
 	stats := map[string]interface{}{
-		"total_services": len(asm.services),
+		"total_services":   len(asm.services),
 		"enabled_services": 0,
-		"current_index": asm.current,
-		"fallback_mode": asm.fallback,
+		"current_index":    asm.current,
+		"fallback_mode":    asm.fallback,
 	}
-	
+
 	for _, service := range asm.services {
 		if service.Enabled {
 			stats["enabled_services"] = stats["enabled_services"].(int) + 1
 		}
 	}
-	
+
 	return stats
 }
 
@@ -398,14 +448,14 @@ func (asm *AIServiceManager) GetStats() map[string]interface{} {
 func (asm *AIServiceManager) SetServiceEnabled(serviceName string, enabled bool) error {
 	asm.mutex.Lock()
 	defer asm.mutex.Unlock()
-	
+
 	for i := range asm.services {
 		if asm.services[i].Name == serviceName {
 			asm.services[i].Enabled = enabled
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("服务 %s 不存在", serviceName)
 }
 
@@ -413,10 +463,282 @@ func (asm *AIServiceManager) SetServiceEnabled(serviceName string, enabled bool)
 func (asm *AIServiceManager) GetServices() []AIService {
 	asm.mutex.RLock()
 	defer asm.mutex.RUnlock()
-	
+
 	services := make([]AIService, len(asm.services))
 	copy(services, asm.services)
 	return services
+}
+
+// 规则引擎方法
+
+// 创建新的规则引擎
+func NewRuleEngine(rules []FilterRule) *RuleEngine {
+	// 按优先级排序规则
+	sortedRules := make([]FilterRule, len(rules))
+	copy(sortedRules, rules)
+	
+	// 简单的冒泡排序按优先级排序
+	for i := 0; i < len(sortedRules)-1; i++ {
+		for j := 0; j < len(sortedRules)-i-1; j++ {
+			if sortedRules[j].Priority > sortedRules[j+1].Priority {
+				sortedRules[j], sortedRules[j+1] = sortedRules[j+1], sortedRules[j]
+			}
+		}
+	}
+	
+	// 编译正则表达式
+	compiledRules := make(map[string]*regexp.Regexp)
+	for _, rule := range sortedRules {
+		if rule.Enabled && rule.Pattern != "" {
+			if compiled, err := regexp.Compile(rule.Pattern); err == nil {
+				compiledRules[rule.ID] = compiled
+			}
+		}
+	}
+	
+	// 统计启用的规则
+	enabledCount := 0
+	for _, rule := range sortedRules {
+		if rule.Enabled {
+			enabledCount++
+		}
+	}
+	
+	return &RuleEngine{
+		rules:         sortedRules,
+		compiledRules: compiledRules,
+		cache:         make(map[string]bool),
+		stats: RuleStats{
+			TotalRules:   len(sortedRules),
+			EnabledRules: enabledCount,
+		},
+	}
+}
+
+// 过滤日志行
+func (re *RuleEngine) Filter(line string) *FilterResult {
+	re.mutex.RLock()
+	defer re.mutex.RUnlock()
+	
+	// 检查缓存
+	if cached, exists := re.cache[line]; exists {
+		re.stats.CacheHits++
+		if cached {
+			return &FilterResult{
+				Action: "ignore",
+				ShouldIgnore: true,
+			}
+		}
+	} else {
+		re.stats.CacheMisses++
+	}
+	
+	// 遍历规则（按优先级顺序）
+	for _, rule := range re.rules {
+		if !rule.Enabled {
+			continue
+		}
+		
+		// 检查是否匹配
+		if compiled, exists := re.compiledRules[rule.ID]; exists {
+			if compiled.MatchString(line) {
+				// 更新统计
+				re.updateStats(rule.Action)
+				
+				// 缓存结果
+				re.cache[line] = (rule.Action == "ignore")
+				
+				return re.createFilterResult(rule)
+			}
+		}
+	}
+	
+	// 没有匹配的规则，默认处理
+	return &FilterResult{
+		Action: "process",
+		ShouldProcess: true,
+	}
+}
+
+// 更新统计信息
+func (re *RuleEngine) updateStats(action string) {
+	switch action {
+	case "filter":
+		re.stats.FilteredLines++
+	case "alert":
+		re.stats.AlertedLines++
+	case "ignore":
+		re.stats.IgnoredLines++
+	case "highlight":
+		re.stats.HighlightedLines++
+	}
+}
+
+// 创建过滤结果
+func (re *RuleEngine) createFilterResult(rule FilterRule) *FilterResult {
+	result := &FilterResult{
+		Action:    rule.Action,
+		RuleID:    rule.ID,
+		RuleName:  rule.Name,
+		Category:  rule.Category,
+		Color:     rule.Color,
+	}
+	
+	// 设置动作标志
+	switch rule.Action {
+	case "filter":
+		result.ShouldProcess = false
+	case "alert":
+		result.ShouldProcess = true
+		result.ShouldAlert = true
+	case "ignore":
+		result.ShouldIgnore = true
+	case "highlight":
+		result.ShouldProcess = true
+		result.ShouldHighlight = true
+	default:
+		result.ShouldProcess = true
+	}
+	
+	return result
+}
+
+// 添加规则
+func (re *RuleEngine) AddRule(rule FilterRule) error {
+	re.mutex.Lock()
+	defer re.mutex.Unlock()
+	
+	// 检查ID是否已存在
+	for _, existingRule := range re.rules {
+		if existingRule.ID == rule.ID {
+			return fmt.Errorf("规则ID %s 已存在", rule.ID)
+		}
+	}
+	
+	// 编译正则表达式
+	if rule.Pattern != "" {
+		compiled, err := regexp.Compile(rule.Pattern)
+		if err != nil {
+			return fmt.Errorf("正则表达式编译失败: %w", err)
+		}
+		re.compiledRules[rule.ID] = compiled
+	}
+	
+	// 添加到规则列表
+	re.rules = append(re.rules, rule)
+	
+	// 重新排序
+	re.sortRules()
+	
+	// 更新统计
+	re.stats.TotalRules++
+	if rule.Enabled {
+		re.stats.EnabledRules++
+	}
+	
+	return nil
+}
+
+// 删除规则
+func (re *RuleEngine) RemoveRule(ruleID string) error {
+	re.mutex.Lock()
+	defer re.mutex.Unlock()
+	
+	for i, rule := range re.rules {
+		if rule.ID == ruleID {
+			// 删除规则
+			re.rules = append(re.rules[:i], re.rules[i+1:]...)
+			
+			// 删除编译的正则表达式
+			delete(re.compiledRules, ruleID)
+			
+			// 更新统计
+			re.stats.TotalRules--
+			if rule.Enabled {
+				re.stats.EnabledRules--
+			}
+			
+			return nil
+		}
+	}
+	
+	return fmt.Errorf("规则ID %s 不存在", ruleID)
+}
+
+// 启用/禁用规则
+func (re *RuleEngine) SetRuleEnabled(ruleID string, enabled bool) error {
+	re.mutex.Lock()
+	defer re.mutex.Unlock()
+	
+	for i, rule := range re.rules {
+		if rule.ID == ruleID {
+			oldEnabled := rule.Enabled
+			re.rules[i].Enabled = enabled
+			
+			// 更新统计
+			if oldEnabled && !enabled {
+				re.stats.EnabledRules--
+			} else if !oldEnabled && enabled {
+				re.stats.EnabledRules++
+			}
+			
+			return nil
+		}
+	}
+	
+	return fmt.Errorf("规则ID %s 不存在", ruleID)
+}
+
+// 排序规则
+func (re *RuleEngine) sortRules() {
+	for i := 0; i < len(re.rules)-1; i++ {
+		for j := 0; j < len(re.rules)-i-1; j++ {
+			if re.rules[j].Priority > re.rules[j+1].Priority {
+				re.rules[j], re.rules[j+1] = re.rules[j+1], re.rules[j]
+			}
+		}
+	}
+}
+
+// 获取规则列表
+func (re *RuleEngine) GetRules() []FilterRule {
+	re.mutex.RLock()
+	defer re.mutex.RUnlock()
+	
+	rules := make([]FilterRule, len(re.rules))
+	copy(rules, re.rules)
+	return rules
+}
+
+// 获取统计信息
+func (re *RuleEngine) GetStats() RuleStats {
+	re.mutex.RLock()
+	defer re.mutex.RUnlock()
+	
+	return re.stats
+}
+
+// 清空缓存
+func (re *RuleEngine) ClearCache() {
+	re.mutex.Lock()
+	defer re.mutex.Unlock()
+	
+	re.cache = make(map[string]bool)
+	re.stats.CacheHits = 0
+	re.stats.CacheMisses = 0
+}
+
+// 测试规则
+func (re *RuleEngine) TestRule(ruleID, testLine string) (bool, error) {
+	re.mutex.RLock()
+	defer re.mutex.RUnlock()
+	
+	compiled, exists := re.compiledRules[ruleID]
+	if !exists {
+		return false, fmt.Errorf("规则ID %s 不存在或未编译", ruleID)
+	}
+	
+	return compiled.MatchString(testLine), nil
 }
 
 // 配置验证器
@@ -432,27 +754,27 @@ func NewConfigValidator() *ConfigValidator {
 
 func (cv *ConfigValidator) Validate(config *Config) error {
 	cv.errors = cv.errors[:0] // 清空之前的错误
-	
+
 	// 验证必填字段
 	cv.validateRequired("ai_endpoint", config.AIEndpoint)
 	cv.validateRequired("token", config.Token)
 	cv.validateRequired("model", config.Model)
-	
+
 	// 验证 URL 格式
 	cv.validateURL("ai_endpoint", config.AIEndpoint)
-	
+
 	// 验证数值范围
 	cv.validateRange("max_retries", config.MaxRetries, 0, 10)
 	cv.validateRange("timeout", config.Timeout, 5, 300)
 	cv.validateRange("rate_limit", config.RateLimit, 1, 1000)
-	
+
 	// 验证 Token 长度
 	cv.validateMinLength("token", config.Token, 10)
-	
+
 	if len(cv.errors) > 0 {
 		return fmt.Errorf("配置验证失败，发现 %d 个错误", len(cv.errors))
 	}
-	
+
 	return nil
 }
 
@@ -470,7 +792,7 @@ func (cv *ConfigValidator) validateURL(field, value string) {
 	if value == "" {
 		return
 	}
-	
+
 	if !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
 		cv.errors = append(cv.errors, ConfigValidationError{
 			Field:   field,
@@ -553,6 +875,9 @@ var errorHandler *ErrorHandler
 
 // 全局AI服务管理器
 var aiServiceManager *AIServiceManager
+
+// 全局规则引擎
+var ruleEngine *RuleEngine
 
 // 批处理配置
 const (
@@ -650,16 +975,25 @@ var (
 	batchWait        = flag.Duration("batch-wait", BATCH_WAIT_TIME, "批处理等待时间")
 	showNotImportant = flag.Bool("show-not-important", false, "显示被过滤的日志（默认不显示）")
 	contextLines     = flag.Int("context", 3, "重要日志显示的上下文行数（前后各N行）")
-	
+
 	// 新增配置管理命令
-	configTest      = flag.Bool("config-test", false, "测试配置文件")
-	configValidate  = flag.Bool("config-validate", false, "验证配置文件")
-	configShow      = flag.Bool("config-show", false, "显示当前配置")
-	
+	configTest     = flag.Bool("config-test", false, "测试配置文件")
+	configValidate = flag.Bool("config-validate", false, "验证配置文件")
+	configShow     = flag.Bool("config-show", false, "显示当前配置")
+
 	// AI服务管理命令
-	aiList          = flag.Bool("ai-list", false, "列出所有AI服务")
-	aiTest          = flag.Bool("ai-test", false, "测试所有AI服务")
-	aiStats         = flag.Bool("ai-stats", false, "显示AI服务统计信息")
+	aiList  = flag.Bool("ai-list", false, "列出所有AI服务")
+	aiTest  = flag.Bool("ai-test", false, "测试所有AI服务")
+	aiStats = flag.Bool("ai-stats", false, "显示AI服务统计信息")
+	
+	// 规则管理命令
+	ruleList        = flag.Bool("rule-list", false, "列出所有过滤规则")
+	ruleTest        = flag.String("rule-test", "", "测试规则 (格式: rule_id,test_line)")
+	ruleStats       = flag.Bool("rule-stats", false, "显示规则引擎统计信息")
+	ruleAdd         = flag.String("rule-add", "", "添加规则 (JSON格式)")
+	ruleRemove      = flag.String("rule-remove", "", "删除规则 (规则ID)")
+	ruleEnable      = flag.String("rule-enable", "", "启用规则 (规则ID)")
+	ruleDisable     = flag.String("rule-disable", "", "禁用规则 (规则ID)")
 
 	// journalctl 特定配置
 	journalServices = flag.String("journal-services", "", "监控的systemd服务列表，逗号分隔 (如: nginx,docker,postgresql)")
@@ -767,36 +1101,71 @@ func main() {
 		handleConfigTest()
 		return
 	}
-	
+
 	if *configValidate {
 		handleConfigValidate()
 		return
 	}
-	
+
 	if *configShow {
 		handleConfigShow()
 		return
 	}
-	
+
 	if *aiList {
 		handleAIList()
 		return
 	}
-	
+
 	if *aiTest {
 		handleAITest()
 		return
 	}
-	
+
 	if *aiStats {
 		handleAIStats()
+		return
+	}
+	
+	if *ruleList {
+		handleRuleList()
+		return
+	}
+	
+	if *ruleTest != "" {
+		handleRuleTest()
+		return
+	}
+	
+	if *ruleStats {
+		handleRuleStats()
+		return
+	}
+	
+	if *ruleAdd != "" {
+		handleRuleAdd()
+		return
+	}
+	
+	if *ruleRemove != "" {
+		handleRuleRemove()
+		return
+	}
+	
+	if *ruleEnable != "" {
+		handleRuleEnable()
+		return
+	}
+	
+	if *ruleDisable != "" {
+		handleRuleDisable()
 		return
 	}
 
 	// 加载配置文件
 	if err := loadConfig(); err != nil {
 		if handledErr := errorHandler.Handle(err, map[string]interface{}{
-			"operation": "load_config",
+			"operation":   "load_config",
 			"config_path": "~/.config/aipipe.json",
 		}); handledErr != nil {
 			log.Printf("⚠️  加载配置文件失败，使用默认配置: %v", err)
@@ -836,33 +1205,33 @@ func main() {
 // 测试配置文件
 func handleConfigTest() {
 	fmt.Println("🧪 测试配置文件...")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 测试 AI 服务连接
 	fmt.Println("🔗 测试 AI 服务连接...")
 	if err := testAIConnection(); err != nil {
 		fmt.Printf("❌ AI 服务连接失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	fmt.Println("✅ 配置文件测试通过！")
 }
 
 // 验证配置文件
 func handleConfigValidate() {
 	fmt.Println("🔍 验证配置文件...")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置验证失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	fmt.Println("✅ 配置文件验证通过！")
 }
 
@@ -870,13 +1239,13 @@ func handleConfigValidate() {
 func handleConfigShow() {
 	fmt.Println("📋 当前配置:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 显示配置信息（隐藏敏感信息）
 	fmt.Printf("AI 端点: %s\n", globalConfig.AIEndpoint)
 	fmt.Printf("模型: %s\n", globalConfig.Model)
@@ -885,7 +1254,7 @@ func handleConfigShow() {
 	fmt.Printf("超时时间: %d 秒\n", globalConfig.Timeout)
 	fmt.Printf("频率限制: %d 次/分钟\n", globalConfig.RateLimit)
 	fmt.Printf("本地过滤: %t\n", globalConfig.LocalFilter)
-	
+
 	if globalConfig.CustomPrompt != "" {
 		fmt.Printf("自定义提示词: %s\n", globalConfig.CustomPrompt)
 	}
@@ -897,25 +1266,25 @@ func handleConfigShow() {
 func handleAIList() {
 	fmt.Println("🤖 AI 服务列表:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	services := aiServiceManager.GetServices()
 	if len(services) == 0 {
 		fmt.Println("没有配置AI服务")
 		return
 	}
-	
+
 	for i, service := range services {
 		status := "❌ 禁用"
 		if service.Enabled {
 			status = "✅ 启用"
 		}
-		
+
 		fmt.Printf("%d. %s %s\n", i+1, status, service.Name)
 		fmt.Printf("   端点: %s\n", service.Endpoint)
 		fmt.Printf("   模型: %s\n", service.Model)
@@ -929,28 +1298,28 @@ func handleAIList() {
 func handleAITest() {
 	fmt.Println("🧪 测试所有AI服务...")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	services := aiServiceManager.GetServices()
 	if len(services) == 0 {
 		fmt.Println("没有配置AI服务")
 		return
 	}
-	
+
 	successCount := 0
 	for _, service := range services {
 		if !service.Enabled {
 			fmt.Printf("⏭️  跳过禁用的服务: %s\n", service.Name)
 			continue
 		}
-		
+
 		fmt.Printf("🔗 测试服务: %s...", service.Name)
-		
+
 		// 创建测试请求
 		testPrompt := "请回复 'OK' 表示连接正常"
 		reqBody := ChatRequest{
@@ -962,45 +1331,45 @@ func handleAITest() {
 				},
 			},
 		}
-		
+
 		jsonData, err := json.Marshal(reqBody)
 		if err != nil {
 			fmt.Printf(" ❌ 构建请求失败\n")
 			continue
 		}
-		
+
 		// 创建HTTP请求
 		req, err := http.NewRequest("POST", service.Endpoint, bytes.NewBuffer(jsonData))
 		if err != nil {
 			fmt.Printf(" ❌ 创建请求失败\n")
 			continue
 		}
-		
+
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("api-key", service.Token)
-		
+
 		// 发送请求
 		client := &http.Client{
 			Timeout: time.Duration(globalConfig.Timeout) * time.Second,
 		}
-		
+
 		resp, err := client.Do(req)
 		if err != nil {
 			fmt.Printf(" ❌ 请求失败: %v\n", err)
 			continue
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
 			fmt.Printf(" ❌ API错误 %d: %s\n", resp.StatusCode, string(body))
 			continue
 		}
-		
+
 		fmt.Printf(" ✅ 成功\n")
 		successCount++
 	}
-	
+
 	fmt.Printf("\n📊 测试结果: %d/%d 服务可用\n", successCount, len(services))
 	if successCount == 0 {
 		os.Exit(1)
@@ -1011,19 +1380,19 @@ func handleAITest() {
 func handleAIStats() {
 	fmt.Println("📊 AI 服务统计信息:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	stats := aiServiceManager.GetStats()
 	fmt.Printf("总服务数: %d\n", stats["total_services"])
 	fmt.Printf("启用服务数: %d\n", stats["enabled_services"])
 	fmt.Printf("当前索引: %d\n", stats["current_index"])
 	fmt.Printf("故障转移模式: %t\n", stats["fallback_mode"])
-	
+
 	// 显示服务详情
 	services := aiServiceManager.GetServices()
 	if len(services) > 0 {
@@ -1042,7 +1411,7 @@ func handleAIStats() {
 func testAIConnection() error {
 	// 创建一个简单的测试请求
 	testPrompt := "请回复 'OK' 表示连接正常"
-	
+
 	// 构建请求
 	reqBody := ChatRequest{
 		Model: globalConfig.Model,
@@ -1053,37 +1422,37 @@ func testAIConnection() error {
 			},
 		},
 	}
-	
+
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
 		return fmt.Errorf("构建请求失败: %w", err)
 	}
-	
+
 	// 创建 HTTP 请求
 	req, err := http.NewRequest("POST", globalConfig.AIEndpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("创建请求失败: %w", err)
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("api-key", globalConfig.Token)
-	
+
 	// 发送请求
 	client := &http.Client{
 		Timeout: time.Duration(globalConfig.Timeout) * time.Second,
 	}
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("请求失败: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("API 返回错误状态码 %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	return nil
 }
 
@@ -1133,7 +1502,7 @@ func findDefaultConfig() (string, error) {
 func loadConfig() error {
 	var configPath string
 	var err error
-	
+
 	// 如果指定了配置文件路径，使用指定的路径
 	if *configFile != "" {
 		configPath = *configFile
@@ -1166,7 +1535,7 @@ func loadConfig() error {
 	if globalConfig.Model == "" {
 		globalConfig.Model = defaultConfig.Model
 	}
-	
+
 	// 设置默认值
 	if globalConfig.MaxRetries == 0 {
 		globalConfig.MaxRetries = defaultConfig.MaxRetries
@@ -1177,7 +1546,7 @@ func loadConfig() error {
 	if globalConfig.RateLimit == 0 {
 		globalConfig.RateLimit = defaultConfig.RateLimit
 	}
-	
+
 	// 初始化AI服务管理器
 	if len(globalConfig.AIServices) > 0 {
 		// 使用新的多AI服务配置
@@ -1194,6 +1563,9 @@ func loadConfig() error {
 		}
 		aiServiceManager = NewAIServiceManager([]AIService{legacyService})
 	}
+
+	// 初始化规则引擎
+	ruleEngine = NewRuleEngine(globalConfig.Rules)
 
 	// 验证配置
 	validator := NewConfigValidator()
@@ -3063,10 +3435,10 @@ func callAIAPI(systemPrompt, userPrompt string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("获取AI服务失败: %w", err)
 	}
-	
+
 	// 记录服务调用
 	aiServiceManager.RecordCall(service.Name)
-	
+
 	// 构建请求，使用 system 和 user 两条消息
 	reqBody := ChatRequest{
 		Model: service.Model,
@@ -3129,20 +3501,20 @@ func callAIAPI(systemPrompt, userPrompt string) (string, error) {
 	startTime := time.Now()
 	var resp *http.Response
 	var httpErr error
-	
+
 	// 重试机制
 	for i := 0; i < globalConfig.MaxRetries; i++ {
 		resp, httpErr = client.Do(req)
 		if httpErr == nil {
 			break
 		}
-		
+
 		// 使用错误处理器处理网络错误
 		if handledErr := errorHandler.Handle(httpErr, map[string]interface{}{
-			"operation": "ai_api_call",
-			"service":   service.Name,
-			"endpoint":  service.Endpoint,
-			"retry":     i + 1,
+			"operation":   "ai_api_call",
+			"service":     service.Name,
+			"endpoint":    service.Endpoint,
+			"retry":       i + 1,
 			"max_retries": globalConfig.MaxRetries,
 		}); handledErr != nil {
 			if i == globalConfig.MaxRetries-1 {
@@ -3158,7 +3530,7 @@ func callAIAPI(systemPrompt, userPrompt string) (string, error) {
 			continue
 		}
 	}
-	
+
 	if httpErr != nil {
 		if *debug {
 			fmt.Printf("❌ 请求失败: %v\n", httpErr)
@@ -3167,7 +3539,7 @@ func callAIAPI(systemPrompt, userPrompt string) (string, error) {
 		return "", httpErr
 	}
 	defer resp.Body.Close()
-	
+
 	elapsed := time.Since(startTime)
 
 	// 读取响应体
@@ -3202,13 +3574,13 @@ func callAIAPI(systemPrompt, userPrompt string) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		apiErr := fmt.Errorf("API 返回错误状态码 %d: %s", resp.StatusCode, string(body))
-		
+
 		// 使用错误处理器处理 API 错误
 		if handledErr := errorHandler.Handle(apiErr, map[string]interface{}{
-			"operation": "ai_api_response",
-			"service":   service.Name,
-			"status_code": resp.StatusCode,
-			"endpoint": service.Endpoint,
+			"operation":     "ai_api_response",
+			"service":       service.Name,
+			"status_code":   resp.StatusCode,
+			"endpoint":      service.Endpoint,
 			"response_body": string(body),
 		}); handledErr != nil {
 			return "", handledErr
@@ -4240,4 +4612,264 @@ func detectWebhookType(webhookURL string) string {
 	}
 
 	return "custom"
+}
+
+// 规则管理命令处理函数
+
+// 列出所有过滤规则
+func handleRuleList() {
+	fmt.Println("📋 过滤规则列表:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	rules := ruleEngine.GetRules()
+	if len(rules) == 0 {
+		fmt.Println("没有配置过滤规则")
+		return
+	}
+	
+	for i, rule := range rules {
+		status := "❌ 禁用"
+		if rule.Enabled {
+			status = "✅ 启用"
+		}
+		
+		fmt.Printf("%d. %s %s\n", i+1, status, rule.Name)
+		fmt.Printf("   ID: %s\n", rule.ID)
+		fmt.Printf("   模式: %s\n", rule.Pattern)
+		fmt.Printf("   动作: %s\n", rule.Action)
+		fmt.Printf("   优先级: %d\n", rule.Priority)
+		fmt.Printf("   分类: %s\n", rule.Category)
+		if rule.Description != "" {
+			fmt.Printf("   描述: %s\n", rule.Description)
+		}
+		if rule.Color != "" {
+			fmt.Printf("   颜色: %s\n", rule.Color)
+		}
+		fmt.Println()
+	}
+}
+
+// 测试规则
+func handleRuleTest() {
+	// 解析参数
+	parts := strings.SplitN(*ruleTest, ",", 2)
+	if len(parts) != 2 {
+		fmt.Printf("❌ 参数格式错误，应为: rule_id,test_line\n")
+		os.Exit(1)
+	}
+	
+	ruleID := parts[0]
+	testLine := parts[1]
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	fmt.Printf("🧪 测试规则: %s\n", ruleID)
+	fmt.Printf("测试行: %s\n", testLine)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	matched, err := ruleEngine.TestRule(ruleID, testLine)
+	if err != nil {
+		fmt.Printf("❌ 测试失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	if matched {
+		fmt.Printf("✅ 匹配成功\n")
+	} else {
+		fmt.Printf("❌ 不匹配\n")
+	}
+}
+
+// 显示规则引擎统计信息
+func handleRuleStats() {
+	fmt.Println("📊 规则引擎统计信息:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	stats := ruleEngine.GetStats()
+	fmt.Printf("总规则数: %d\n", stats.TotalRules)
+	fmt.Printf("启用规则数: %d\n", stats.EnabledRules)
+	fmt.Printf("缓存命中: %d\n", stats.CacheHits)
+	fmt.Printf("缓存未命中: %d\n", stats.CacheMisses)
+	fmt.Printf("过滤行数: %d\n", stats.FilteredLines)
+	fmt.Printf("告警行数: %d\n", stats.AlertedLines)
+	fmt.Printf("忽略行数: %d\n", stats.IgnoredLines)
+	fmt.Printf("高亮行数: %d\n", stats.HighlightedLines)
+	
+	// 计算缓存命中率
+	totalCache := stats.CacheHits + stats.CacheMisses
+	if totalCache > 0 {
+		hitRate := float64(stats.CacheHits) / float64(totalCache) * 100
+		fmt.Printf("缓存命中率: %.2f%%\n", hitRate)
+	}
+}
+
+// 添加规则
+func handleRuleAdd() {
+	fmt.Println("➕ 添加过滤规则...")
+	
+	// 解析JSON
+	var rule FilterRule
+	if err := json.Unmarshal([]byte(*ruleAdd), &rule); err != nil {
+		fmt.Printf("❌ JSON解析失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 验证必填字段
+	if rule.ID == "" {
+		fmt.Printf("❌ 规则ID不能为空\n")
+		os.Exit(1)
+	}
+	if rule.Pattern == "" {
+		fmt.Printf("❌ 规则模式不能为空\n")
+		os.Exit(1)
+	}
+	if rule.Action == "" {
+		fmt.Printf("❌ 规则动作不能为空\n")
+		os.Exit(1)
+	}
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 添加规则
+	if err := ruleEngine.AddRule(rule); err != nil {
+		fmt.Printf("❌ 添加规则失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 保存规则到配置文件
+	if err := saveRulesToConfig(); err != nil {
+		fmt.Printf("⚠️  规则添加成功，但保存到配置文件失败: %v\n", err)
+	} else {
+		fmt.Printf("✅ 规则 %s 添加并保存成功\n", rule.ID)
+	}
+}
+
+// 删除规则
+func handleRuleRemove() {
+	ruleID := *ruleRemove
+	
+	fmt.Printf("🗑️  删除规则: %s\n", ruleID)
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 删除规则
+	if err := ruleEngine.RemoveRule(ruleID); err != nil {
+		fmt.Printf("❌ 删除规则失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 保存规则到配置文件
+	if err := saveRulesToConfig(); err != nil {
+		fmt.Printf("⚠️  规则删除成功，但保存到配置文件失败: %v\n", err)
+	} else {
+		fmt.Printf("✅ 规则 %s 删除并保存成功\n", ruleID)
+	}
+}
+
+// 启用规则
+func handleRuleEnable() {
+	ruleID := *ruleEnable
+	
+	fmt.Printf("✅ 启用规则: %s\n", ruleID)
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 启用规则
+	if err := ruleEngine.SetRuleEnabled(ruleID, true); err != nil {
+		fmt.Printf("❌ 启用规则失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	fmt.Printf("✅ 规则 %s 启用成功\n", ruleID)
+}
+
+// 禁用规则
+func handleRuleDisable() {
+	ruleID := *ruleDisable
+	
+	fmt.Printf("❌ 禁用规则: %s\n", ruleID)
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 禁用规则
+	if err := ruleEngine.SetRuleEnabled(ruleID, false); err != nil {
+		fmt.Printf("❌ 禁用规则失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	fmt.Printf("✅ 规则 %s 禁用成功\n", ruleID)
+}
+
+// 保存规则到配置文件
+func saveRulesToConfig() error {
+	// 获取当前规则
+	rules := ruleEngine.GetRules()
+	
+	// 更新全局配置
+	globalConfig.Rules = rules
+	
+	// 获取配置文件路径
+	configPath, err := findDefaultConfig()
+	if err != nil {
+		return fmt.Errorf("查找配置文件失败: %w", err)
+	}
+	
+	// 读取现有配置
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("读取配置文件失败: %w", err)
+	}
+	
+	// 解析现有配置
+	var config map[string]interface{}
+	if err := json.Unmarshal(configData, &config); err != nil {
+		return fmt.Errorf("解析配置文件失败: %w", err)
+	}
+	
+	// 更新规则
+	config["rules"] = rules
+	
+	// 保存配置
+	updatedData, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("序列化配置失败: %w", err)
+	}
+	
+	if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
+		return fmt.Errorf("写入配置文件失败: %w", err)
+	}
+	
+	return nil
 }
