@@ -91,6 +91,16 @@
       "color": "orange"
     }
   ],
+  "cache": {
+    "max_size": 104857600,
+    "max_items": 1000,
+    "default_ttl": "1h",
+    "ai_ttl": "24h",
+    "rule_ttl": "1h",
+    "config_ttl": "30m",
+    "cleanup_interval": "5m",
+    "enabled": true
+  },
   "notifiers": {
     "email": {
       "enabled": false,

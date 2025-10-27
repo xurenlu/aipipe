@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
 	"flag"
@@ -91,36 +92,102 @@ type FilterRule struct {
 
 // 规则引擎
 type RuleEngine struct {
-	rules       []FilterRule
+	rules         []FilterRule
 	compiledRules map[string]*regexp.Regexp
-	cache       map[string]bool
-	mutex       sync.RWMutex
-	stats       RuleStats
+	cache         map[string]bool
+	mutex         sync.RWMutex
+	stats         RuleStats
 }
 
 // 规则统计
 type RuleStats struct {
-	TotalRules     int `json:"total_rules"`
-	EnabledRules   int `json:"enabled_rules"`
-	CacheHits      int `json:"cache_hits"`
-	CacheMisses    int `json:"cache_misses"`
-	FilteredLines  int `json:"filtered_lines"`
-	AlertedLines   int `json:"alerted_lines"`
-	IgnoredLines   int `json:"ignored_lines"`
+	TotalRules       int `json:"total_rules"`
+	EnabledRules     int `json:"enabled_rules"`
+	CacheHits        int `json:"cache_hits"`
+	CacheMisses      int `json:"cache_misses"`
+	FilteredLines    int `json:"filtered_lines"`
+	AlertedLines     int `json:"alerted_lines"`
+	IgnoredLines     int `json:"ignored_lines"`
 	HighlightedLines int `json:"highlighted_lines"`
 }
 
 // 过滤结果
 type FilterResult struct {
-	Action      string `json:"action"`      // 动作
-	RuleID      string `json:"rule_id"`     // 匹配的规则ID
-	RuleName    string `json:"rule_name"`   // 规则名称
-	Category    string `json:"category"`    // 分类
-	Color       string `json:"color"`       // 颜色
-	ShouldProcess bool `json:"should_process"` // 是否应该处理
-	ShouldAlert   bool `json:"should_alert"`   // 是否应该告警
-	ShouldIgnore  bool `json:"should_ignore"`  // 是否应该忽略
-	ShouldHighlight bool `json:"should_highlight"` // 是否应该高亮
+	Action          string `json:"action"`           // 动作
+	RuleID          string `json:"rule_id"`          // 匹配的规则ID
+	RuleName        string `json:"rule_name"`        // 规则名称
+	Category        string `json:"category"`         // 分类
+	Color           string `json:"color"`            // 颜色
+	ShouldProcess   bool   `json:"should_process"`   // 是否应该处理
+	ShouldAlert     bool   `json:"should_alert"`     // 是否应该告警
+	ShouldIgnore    bool   `json:"should_ignore"`    // 是否应该忽略
+	ShouldHighlight bool   `json:"should_highlight"` // 是否应该高亮
+}
+
+// 缓存项
+type CacheItem struct {
+	Key        string      `json:"key"`
+	Value      interface{} `json:"value"`
+	ExpiresAt  time.Time   `json:"expires_at"`
+	CreatedAt  time.Time   `json:"created_at"`
+	AccessCount int        `json:"access_count"`
+	Size       int64       `json:"size"`
+}
+
+// AI分析结果缓存
+type AIAnalysisCache struct {
+	LogHash    string    `json:"log_hash"`
+	Result     string    `json:"result"`
+	Confidence float64   `json:"confidence"`
+	Model      string    `json:"model"`
+	CreatedAt  time.Time `json:"created_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
+}
+
+// 规则匹配缓存
+type RuleMatchCache struct {
+	LogHash   string    `json:"log_hash"`
+	RuleID    string    `json:"rule_id"`
+	Matched   bool      `json:"matched"`
+	Result    *FilterResult `json:"result"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// 缓存统计
+type CacheStats struct {
+	TotalItems     int     `json:"total_items"`
+	HitCount       int64   `json:"hit_count"`
+	MissCount      int64   `json:"miss_count"`
+	EvictionCount  int64   `json:"eviction_count"`
+	MemoryUsage    int64   `json:"memory_usage"`
+	HitRate        float64 `json:"hit_rate"`
+	ExpiredItems   int     `json:"expired_items"`
+}
+
+// 缓存管理器
+type CacheManager struct {
+	aiCache      map[string]*AIAnalysisCache
+	ruleCache    map[string]*RuleMatchCache
+	configCache  map[string]*CacheItem
+	stats        CacheStats
+	mutex        sync.RWMutex
+	maxSize      int64
+	maxItems     int
+	cleanupInterval time.Duration
+	stopCleanup  chan bool
+}
+
+// 缓存配置
+type CacheConfig struct {
+	MaxSize         int64         `json:"max_size"`         // 最大内存使用量（字节）
+	MaxItems        int           `json:"max_items"`        // 最大缓存项数
+	DefaultTTL      time.Duration `json:"default_ttl"`      // 默认过期时间
+	AITTL           time.Duration `json:"ai_ttl"`           // AI分析结果过期时间
+	RuleTTL         time.Duration `json:"rule_ttl"`         // 规则匹配过期时间
+	ConfigTTL       time.Duration `json:"config_ttl"`       // 配置缓存过期时间
+	CleanupInterval time.Duration `json:"cleanup_interval"` // 清理间隔
+	Enabled         bool          `json:"enabled"`          // 是否启用缓存
 }
 
 // 配置文件结构
@@ -140,9 +207,12 @@ type Config struct {
 	// 多AI服务支持
 	AIServices []AIService `json:"ai_services"` // AI 服务列表
 	DefaultAI  string      `json:"default_ai"`  // 默认AI服务名称
-	
+
 	// 规则引擎配置
 	Rules []FilterRule `json:"rules"` // 过滤规则列表
+	
+	// 缓存配置
+	Cache CacheConfig `json:"cache"` // 缓存配置
 }
 
 // 错误级别
@@ -476,7 +546,7 @@ func NewRuleEngine(rules []FilterRule) *RuleEngine {
 	// 按优先级排序规则
 	sortedRules := make([]FilterRule, len(rules))
 	copy(sortedRules, rules)
-	
+
 	// 简单的冒泡排序按优先级排序
 	for i := 0; i < len(sortedRules)-1; i++ {
 		for j := 0; j < len(sortedRules)-i-1; j++ {
@@ -485,7 +555,7 @@ func NewRuleEngine(rules []FilterRule) *RuleEngine {
 			}
 		}
 	}
-	
+
 	// 编译正则表达式
 	compiledRules := make(map[string]*regexp.Regexp)
 	for _, rule := range sortedRules {
@@ -495,7 +565,7 @@ func NewRuleEngine(rules []FilterRule) *RuleEngine {
 			}
 		}
 	}
-	
+
 	// 统计启用的规则
 	enabledCount := 0
 	for _, rule := range sortedRules {
@@ -503,7 +573,7 @@ func NewRuleEngine(rules []FilterRule) *RuleEngine {
 			enabledCount++
 		}
 	}
-	
+
 	return &RuleEngine{
 		rules:         sortedRules,
 		compiledRules: compiledRules,
@@ -519,43 +589,43 @@ func NewRuleEngine(rules []FilterRule) *RuleEngine {
 func (re *RuleEngine) Filter(line string) *FilterResult {
 	re.mutex.RLock()
 	defer re.mutex.RUnlock()
-	
+
 	// 检查缓存
 	if cached, exists := re.cache[line]; exists {
 		re.stats.CacheHits++
 		if cached {
 			return &FilterResult{
-				Action: "ignore",
+				Action:       "ignore",
 				ShouldIgnore: true,
 			}
 		}
 	} else {
 		re.stats.CacheMisses++
 	}
-	
+
 	// 遍历规则（按优先级顺序）
 	for _, rule := range re.rules {
 		if !rule.Enabled {
 			continue
 		}
-		
+
 		// 检查是否匹配
 		if compiled, exists := re.compiledRules[rule.ID]; exists {
 			if compiled.MatchString(line) {
 				// 更新统计
 				re.updateStats(rule.Action)
-				
+
 				// 缓存结果
 				re.cache[line] = (rule.Action == "ignore")
-				
+
 				return re.createFilterResult(rule)
 			}
 		}
 	}
-	
+
 	// 没有匹配的规则，默认处理
 	return &FilterResult{
-		Action: "process",
+		Action:        "process",
 		ShouldProcess: true,
 	}
 }
@@ -577,13 +647,13 @@ func (re *RuleEngine) updateStats(action string) {
 // 创建过滤结果
 func (re *RuleEngine) createFilterResult(rule FilterRule) *FilterResult {
 	result := &FilterResult{
-		Action:    rule.Action,
-		RuleID:    rule.ID,
-		RuleName:  rule.Name,
-		Category:  rule.Category,
-		Color:     rule.Color,
+		Action:   rule.Action,
+		RuleID:   rule.ID,
+		RuleName: rule.Name,
+		Category: rule.Category,
+		Color:    rule.Color,
 	}
-	
+
 	// 设置动作标志
 	switch rule.Action {
 	case "filter":
@@ -599,7 +669,7 @@ func (re *RuleEngine) createFilterResult(rule FilterRule) *FilterResult {
 	default:
 		result.ShouldProcess = true
 	}
-	
+
 	return result
 }
 
@@ -607,14 +677,14 @@ func (re *RuleEngine) createFilterResult(rule FilterRule) *FilterResult {
 func (re *RuleEngine) AddRule(rule FilterRule) error {
 	re.mutex.Lock()
 	defer re.mutex.Unlock()
-	
+
 	// 检查ID是否已存在
 	for _, existingRule := range re.rules {
 		if existingRule.ID == rule.ID {
 			return fmt.Errorf("规则ID %s 已存在", rule.ID)
 		}
 	}
-	
+
 	// 编译正则表达式
 	if rule.Pattern != "" {
 		compiled, err := regexp.Compile(rule.Pattern)
@@ -623,19 +693,19 @@ func (re *RuleEngine) AddRule(rule FilterRule) error {
 		}
 		re.compiledRules[rule.ID] = compiled
 	}
-	
+
 	// 添加到规则列表
 	re.rules = append(re.rules, rule)
-	
+
 	// 重新排序
 	re.sortRules()
-	
+
 	// 更新统计
 	re.stats.TotalRules++
 	if rule.Enabled {
 		re.stats.EnabledRules++
 	}
-	
+
 	return nil
 }
 
@@ -643,25 +713,25 @@ func (re *RuleEngine) AddRule(rule FilterRule) error {
 func (re *RuleEngine) RemoveRule(ruleID string) error {
 	re.mutex.Lock()
 	defer re.mutex.Unlock()
-	
+
 	for i, rule := range re.rules {
 		if rule.ID == ruleID {
 			// 删除规则
 			re.rules = append(re.rules[:i], re.rules[i+1:]...)
-			
+
 			// 删除编译的正则表达式
 			delete(re.compiledRules, ruleID)
-			
+
 			// 更新统计
 			re.stats.TotalRules--
 			if rule.Enabled {
 				re.stats.EnabledRules--
 			}
-			
+
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("规则ID %s 不存在", ruleID)
 }
 
@@ -669,23 +739,23 @@ func (re *RuleEngine) RemoveRule(ruleID string) error {
 func (re *RuleEngine) SetRuleEnabled(ruleID string, enabled bool) error {
 	re.mutex.Lock()
 	defer re.mutex.Unlock()
-	
+
 	for i, rule := range re.rules {
 		if rule.ID == ruleID {
 			oldEnabled := rule.Enabled
 			re.rules[i].Enabled = enabled
-			
+
 			// 更新统计
 			if oldEnabled && !enabled {
 				re.stats.EnabledRules--
 			} else if !oldEnabled && enabled {
 				re.stats.EnabledRules++
 			}
-			
+
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("规则ID %s 不存在", ruleID)
 }
 
@@ -704,7 +774,7 @@ func (re *RuleEngine) sortRules() {
 func (re *RuleEngine) GetRules() []FilterRule {
 	re.mutex.RLock()
 	defer re.mutex.RUnlock()
-	
+
 	rules := make([]FilterRule, len(re.rules))
 	copy(rules, re.rules)
 	return rules
@@ -714,7 +784,7 @@ func (re *RuleEngine) GetRules() []FilterRule {
 func (re *RuleEngine) GetStats() RuleStats {
 	re.mutex.RLock()
 	defer re.mutex.RUnlock()
-	
+
 	return re.stats
 }
 
@@ -722,7 +792,7 @@ func (re *RuleEngine) GetStats() RuleStats {
 func (re *RuleEngine) ClearCache() {
 	re.mutex.Lock()
 	defer re.mutex.Unlock()
-	
+
 	re.cache = make(map[string]bool)
 	re.stats.CacheHits = 0
 	re.stats.CacheMisses = 0
@@ -732,12 +802,12 @@ func (re *RuleEngine) ClearCache() {
 func (re *RuleEngine) TestRule(ruleID, testLine string) (bool, error) {
 	re.mutex.RLock()
 	defer re.mutex.RUnlock()
-	
+
 	compiled, exists := re.compiledRules[ruleID]
 	if !exists {
 		return false, fmt.Errorf("规则ID %s 不存在或未编译", ruleID)
 	}
-	
+
 	return compiled.MatchString(testLine), nil
 }
 
@@ -865,6 +935,16 @@ var defaultConfig = Config{
 		},
 		CustomWebhooks: []WebhookConfig{},
 	},
+	Cache: CacheConfig{
+		MaxSize:         100 * 1024 * 1024, // 100MB
+		MaxItems:        1000,
+		DefaultTTL:      1 * time.Hour,
+		AITTL:           24 * time.Hour,
+		RuleTTL:         1 * time.Hour,
+		ConfigTTL:       30 * time.Minute,
+		CleanupInterval: 5 * time.Minute,
+		Enabled:         true,
+	},
 }
 
 // 全局配置变量
@@ -878,6 +958,9 @@ var aiServiceManager *AIServiceManager
 
 // 全局规则引擎
 var ruleEngine *RuleEngine
+
+// 全局缓存管理器
+var cacheManager *CacheManager
 
 // 批处理配置
 const (
@@ -985,15 +1068,20 @@ var (
 	aiList  = flag.Bool("ai-list", false, "列出所有AI服务")
 	aiTest  = flag.Bool("ai-test", false, "测试所有AI服务")
 	aiStats = flag.Bool("ai-stats", false, "显示AI服务统计信息")
-	
+
 	// 规则管理命令
-	ruleList        = flag.Bool("rule-list", false, "列出所有过滤规则")
-	ruleTest        = flag.String("rule-test", "", "测试规则 (格式: rule_id,test_line)")
-	ruleStats       = flag.Bool("rule-stats", false, "显示规则引擎统计信息")
-	ruleAdd         = flag.String("rule-add", "", "添加规则 (JSON格式)")
-	ruleRemove      = flag.String("rule-remove", "", "删除规则 (规则ID)")
-	ruleEnable      = flag.String("rule-enable", "", "启用规则 (规则ID)")
-	ruleDisable     = flag.String("rule-disable", "", "禁用规则 (规则ID)")
+	ruleList    = flag.Bool("rule-list", false, "列出所有过滤规则")
+	ruleTest    = flag.String("rule-test", "", "测试规则 (格式: rule_id,test_line)")
+	ruleStats   = flag.Bool("rule-stats", false, "显示规则引擎统计信息")
+	ruleAdd     = flag.String("rule-add", "", "添加规则 (JSON格式)")
+	ruleRemove  = flag.String("rule-remove", "", "删除规则 (规则ID)")
+	ruleEnable  = flag.String("rule-enable", "", "启用规则 (规则ID)")
+	ruleDisable = flag.String("rule-disable", "", "禁用规则 (规则ID)")
+	
+	// 缓存管理命令
+	cacheStats      = flag.Bool("cache-stats", false, "显示缓存统计信息")
+	cacheClear      = flag.Bool("cache-clear", false, "清空所有缓存")
+	cacheTest       = flag.Bool("cache-test", false, "测试缓存功能")
 
 	// journalctl 特定配置
 	journalServices = flag.String("journal-services", "", "监控的systemd服务列表，逗号分隔 (如: nginx,docker,postgresql)")
@@ -1126,39 +1214,54 @@ func main() {
 		handleAIStats()
 		return
 	}
-	
+
 	if *ruleList {
 		handleRuleList()
 		return
 	}
-	
+
 	if *ruleTest != "" {
 		handleRuleTest()
 		return
 	}
-	
+
 	if *ruleStats {
 		handleRuleStats()
 		return
 	}
-	
+
 	if *ruleAdd != "" {
 		handleRuleAdd()
 		return
 	}
-	
+
 	if *ruleRemove != "" {
 		handleRuleRemove()
 		return
 	}
-	
+
 	if *ruleEnable != "" {
 		handleRuleEnable()
 		return
 	}
-	
+
 	if *ruleDisable != "" {
 		handleRuleDisable()
+		return
+	}
+	
+	if *cacheStats {
+		handleCacheStats()
+		return
+	}
+	
+	if *cacheClear {
+		handleCacheClear()
+		return
+	}
+	
+	if *cacheTest {
+		handleCacheTest()
 		return
 	}
 
@@ -1566,6 +1669,9 @@ func loadConfig() error {
 
 	// 初始化规则引擎
 	ruleEngine = NewRuleEngine(globalConfig.Rules)
+
+	// 初始化缓存管理器
+	cacheManager = NewCacheManager(globalConfig.Cache)
 
 	// 验证配置
 	validator := NewConfigValidator()
@@ -4620,25 +4726,25 @@ func detectWebhookType(webhookURL string) string {
 func handleRuleList() {
 	fmt.Println("📋 过滤规则列表:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	rules := ruleEngine.GetRules()
 	if len(rules) == 0 {
 		fmt.Println("没有配置过滤规则")
 		return
 	}
-	
+
 	for i, rule := range rules {
 		status := "❌ 禁用"
 		if rule.Enabled {
 			status = "✅ 启用"
 		}
-		
+
 		fmt.Printf("%d. %s %s\n", i+1, status, rule.Name)
 		fmt.Printf("   ID: %s\n", rule.ID)
 		fmt.Printf("   模式: %s\n", rule.Pattern)
@@ -4663,26 +4769,26 @@ func handleRuleTest() {
 		fmt.Printf("❌ 参数格式错误，应为: rule_id,test_line\n")
 		os.Exit(1)
 	}
-	
+
 	ruleID := parts[0]
 	testLine := parts[1]
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	fmt.Printf("🧪 测试规则: %s\n", ruleID)
 	fmt.Printf("测试行: %s\n", testLine)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	matched, err := ruleEngine.TestRule(ruleID, testLine)
 	if err != nil {
 		fmt.Printf("❌ 测试失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	if matched {
 		fmt.Printf("✅ 匹配成功\n")
 	} else {
@@ -4694,13 +4800,13 @@ func handleRuleTest() {
 func handleRuleStats() {
 	fmt.Println("📊 规则引擎统计信息:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	stats := ruleEngine.GetStats()
 	fmt.Printf("总规则数: %d\n", stats.TotalRules)
 	fmt.Printf("启用规则数: %d\n", stats.EnabledRules)
@@ -4710,7 +4816,7 @@ func handleRuleStats() {
 	fmt.Printf("告警行数: %d\n", stats.AlertedLines)
 	fmt.Printf("忽略行数: %d\n", stats.IgnoredLines)
 	fmt.Printf("高亮行数: %d\n", stats.HighlightedLines)
-	
+
 	// 计算缓存命中率
 	totalCache := stats.CacheHits + stats.CacheMisses
 	if totalCache > 0 {
@@ -4722,14 +4828,14 @@ func handleRuleStats() {
 // 添加规则
 func handleRuleAdd() {
 	fmt.Println("➕ 添加过滤规则...")
-	
+
 	// 解析JSON
 	var rule FilterRule
 	if err := json.Unmarshal([]byte(*ruleAdd), &rule); err != nil {
 		fmt.Printf("❌ JSON解析失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 验证必填字段
 	if rule.ID == "" {
 		fmt.Printf("❌ 规则ID不能为空\n")
@@ -4743,19 +4849,19 @@ func handleRuleAdd() {
 		fmt.Printf("❌ 规则动作不能为空\n")
 		os.Exit(1)
 	}
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 添加规则
 	if err := ruleEngine.AddRule(rule); err != nil {
 		fmt.Printf("❌ 添加规则失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 保存规则到配置文件
 	if err := saveRulesToConfig(); err != nil {
 		fmt.Printf("⚠️  规则添加成功，但保存到配置文件失败: %v\n", err)
@@ -4767,21 +4873,21 @@ func handleRuleAdd() {
 // 删除规则
 func handleRuleRemove() {
 	ruleID := *ruleRemove
-	
+
 	fmt.Printf("🗑️  删除规则: %s\n", ruleID)
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 删除规则
 	if err := ruleEngine.RemoveRule(ruleID); err != nil {
 		fmt.Printf("❌ 删除规则失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 保存规则到配置文件
 	if err := saveRulesToConfig(); err != nil {
 		fmt.Printf("⚠️  规则删除成功，但保存到配置文件失败: %v\n", err)
@@ -4793,42 +4899,42 @@ func handleRuleRemove() {
 // 启用规则
 func handleRuleEnable() {
 	ruleID := *ruleEnable
-	
+
 	fmt.Printf("✅ 启用规则: %s\n", ruleID)
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 启用规则
 	if err := ruleEngine.SetRuleEnabled(ruleID, true); err != nil {
 		fmt.Printf("❌ 启用规则失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	fmt.Printf("✅ 规则 %s 启用成功\n", ruleID)
 }
 
 // 禁用规则
 func handleRuleDisable() {
 	ruleID := *ruleDisable
-	
+
 	fmt.Printf("❌ 禁用规则: %s\n", ruleID)
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 禁用规则
 	if err := ruleEngine.SetRuleEnabled(ruleID, false); err != nil {
 		fmt.Printf("❌ 禁用规则失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	fmt.Printf("✅ 规则 %s 禁用成功\n", ruleID)
 }
 
@@ -4836,40 +4942,452 @@ func handleRuleDisable() {
 func saveRulesToConfig() error {
 	// 获取当前规则
 	rules := ruleEngine.GetRules()
-	
+
 	// 更新全局配置
 	globalConfig.Rules = rules
-	
+
 	// 获取配置文件路径
 	configPath, err := findDefaultConfig()
 	if err != nil {
 		return fmt.Errorf("查找配置文件失败: %w", err)
 	}
-	
+
 	// 读取现有配置
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("读取配置文件失败: %w", err)
 	}
-	
+
 	// 解析现有配置
 	var config map[string]interface{}
 	if err := json.Unmarshal(configData, &config); err != nil {
 		return fmt.Errorf("解析配置文件失败: %w", err)
 	}
-	
+
 	// 更新规则
 	config["rules"] = rules
-	
+
 	// 保存配置
 	updatedData, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return fmt.Errorf("序列化配置失败: %w", err)
 	}
-	
+
 	if err := os.WriteFile(configPath, updatedData, 0644); err != nil {
 		return fmt.Errorf("写入配置文件失败: %w", err)
 	}
-	
+
 	return nil
+}
+
+// 缓存管理器方法
+
+// 创建新的缓存管理器
+func NewCacheManager(config CacheConfig) *CacheManager {
+	cm := &CacheManager{
+		aiCache:         make(map[string]*AIAnalysisCache),
+		ruleCache:       make(map[string]*RuleMatchCache),
+		configCache:     make(map[string]*CacheItem),
+		maxSize:         config.MaxSize,
+		maxItems:        config.MaxItems,
+		cleanupInterval: config.CleanupInterval,
+		stopCleanup:     make(chan bool),
+	}
+	
+	// 启动清理协程
+	if config.Enabled {
+		go cm.startCleanup()
+	}
+	
+	return cm
+}
+
+// 启动定期清理
+func (cm *CacheManager) startCleanup() {
+	ticker := time.NewTicker(cm.cleanupInterval)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			cm.cleanup()
+		case <-cm.stopCleanup:
+			return
+		}
+	}
+}
+
+// 清理过期缓存
+func (cm *CacheManager) cleanup() {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	now := time.Now()
+	expiredCount := 0
+	
+	// 清理AI分析缓存
+	for key, item := range cm.aiCache {
+		if now.After(item.ExpiresAt) {
+			delete(cm.aiCache, key)
+			expiredCount++
+		}
+	}
+	
+	// 清理规则匹配缓存
+	for key, item := range cm.ruleCache {
+		if now.After(item.ExpiresAt) {
+			delete(cm.ruleCache, key)
+			expiredCount++
+		}
+	}
+	
+	// 清理配置缓存
+	for key, item := range cm.configCache {
+		if now.After(item.ExpiresAt) {
+			delete(cm.configCache, key)
+			expiredCount++
+		}
+	}
+	
+	cm.stats.ExpiredItems = expiredCount
+	cm.updateStats()
+}
+
+// 更新统计信息
+func (cm *CacheManager) updateStats() {
+	cm.stats.TotalItems = len(cm.aiCache) + len(cm.ruleCache) + len(cm.configCache)
+	
+	// 计算命中率
+	total := cm.stats.HitCount + cm.stats.MissCount
+	if total > 0 {
+		cm.stats.HitRate = float64(cm.stats.HitCount) / float64(total) * 100
+	}
+	
+	// 计算内存使用量
+	cm.stats.MemoryUsage = cm.calculateMemoryUsage()
+}
+
+// 计算内存使用量
+func (cm *CacheManager) calculateMemoryUsage() int64 {
+	var total int64
+	
+	for _, item := range cm.aiCache {
+		total += int64(len(item.LogHash) + len(item.Result) + len(item.Model))
+	}
+	
+	for _, item := range cm.ruleCache {
+		total += int64(len(item.LogHash) + len(item.RuleID))
+		if item.Result != nil {
+			total += int64(len(item.Result.Action) + len(item.Result.RuleID))
+		}
+	}
+	
+	for _, item := range cm.configCache {
+		total += int64(len(item.Key)) + item.Size
+	}
+	
+	return total
+}
+
+// 获取AI分析结果
+func (cm *CacheManager) GetAIAnalysis(logHash string) (*AIAnalysisCache, bool) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+	
+	item, exists := cm.aiCache[logHash]
+	if !exists {
+		cm.stats.MissCount++
+		return nil, false
+	}
+	
+	// 检查是否过期
+	if time.Now().After(item.ExpiresAt) {
+		cm.stats.MissCount++
+		return nil, false
+	}
+	
+	cm.stats.HitCount++
+	return item, true
+}
+
+// 设置AI分析结果
+func (cm *CacheManager) SetAIAnalysis(logHash string, result *AIAnalysisCache) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	// 检查是否需要清理空间
+	if cm.needsEviction() {
+		cm.evictOldest()
+	}
+	
+	cm.aiCache[logHash] = result
+	cm.updateStats()
+}
+
+// 获取规则匹配结果
+func (cm *CacheManager) GetRuleMatch(logHash, ruleID string) (*RuleMatchCache, bool) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+	
+	key := logHash + ":" + ruleID
+	item, exists := cm.ruleCache[key]
+	if !exists {
+		cm.stats.MissCount++
+		return nil, false
+	}
+	
+	// 检查是否过期
+	if time.Now().After(item.ExpiresAt) {
+		cm.stats.MissCount++
+		return nil, false
+	}
+	
+	cm.stats.HitCount++
+	return item, true
+}
+
+// 设置规则匹配结果
+func (cm *CacheManager) SetRuleMatch(logHash, ruleID string, result *RuleMatchCache) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	// 检查是否需要清理空间
+	if cm.needsEviction() {
+		cm.evictOldest()
+	}
+	
+	key := logHash + ":" + ruleID
+	cm.ruleCache[key] = result
+	cm.updateStats()
+}
+
+// 获取配置缓存
+func (cm *CacheManager) GetConfig(key string) (interface{}, bool) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+	
+	item, exists := cm.configCache[key]
+	if !exists {
+		cm.stats.MissCount++
+		return nil, false
+	}
+	
+	// 检查是否过期
+	if time.Now().After(item.ExpiresAt) {
+		cm.stats.MissCount++
+		return nil, false
+	}
+	
+	item.AccessCount++
+	cm.stats.HitCount++
+	return item.Value, true
+}
+
+// 设置配置缓存
+func (cm *CacheManager) SetConfig(key string, value interface{}, ttl time.Duration) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	// 检查是否需要清理空间
+	if cm.needsEviction() {
+		cm.evictOldest()
+	}
+	
+	now := time.Now()
+	item := &CacheItem{
+		Key:        key,
+		Value:      value,
+		CreatedAt:  now,
+		ExpiresAt:  now.Add(ttl),
+		AccessCount: 0,
+		Size:       cm.calculateItemSize(value),
+	}
+	
+	cm.configCache[key] = item
+	cm.updateStats()
+}
+
+// 计算项目大小
+func (cm *CacheManager) calculateItemSize(value interface{}) int64 {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return 0
+	}
+	return int64(len(data))
+}
+
+// 检查是否需要清理
+func (cm *CacheManager) needsEviction() bool {
+	return cm.stats.MemoryUsage > cm.maxSize || cm.stats.TotalItems > cm.maxItems
+}
+
+// 清理最旧的项
+func (cm *CacheManager) evictOldest() {
+	// 简单的LRU策略：清理访问次数最少的项
+	var oldestKey string
+	var oldestAccess int = int(^uint(0) >> 1) // 最大int值
+	
+	for key, item := range cm.configCache {
+		if item.AccessCount < oldestAccess {
+			oldestAccess = item.AccessCount
+			oldestKey = key
+		}
+	}
+	
+	if oldestKey != "" {
+		delete(cm.configCache, oldestKey)
+		cm.stats.EvictionCount++
+	}
+}
+
+// 清空所有缓存
+func (cm *CacheManager) Clear() {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	cm.aiCache = make(map[string]*AIAnalysisCache)
+	cm.ruleCache = make(map[string]*RuleMatchCache)
+	cm.configCache = make(map[string]*CacheItem)
+	cm.stats = CacheStats{}
+}
+
+// 获取统计信息
+func (cm *CacheManager) GetStats() CacheStats {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+	
+	cm.updateStats()
+	return cm.stats
+}
+
+// 停止缓存管理器
+func (cm *CacheManager) Stop() {
+	close(cm.stopCleanup)
+}
+
+// 生成日志哈希
+func generateLogHash(logLine string) string {
+	hash := sha256.Sum256([]byte(logLine))
+	return fmt.Sprintf("%x", hash)
+}
+
+// 缓存管理命令处理函数
+
+// 显示缓存统计信息
+func handleCacheStats() {
+	fmt.Println("📊 缓存统计信息:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	stats := cacheManager.GetStats()
+	fmt.Printf("总缓存项数: %d\n", stats.TotalItems)
+	fmt.Printf("缓存命中次数: %d\n", stats.HitCount)
+	fmt.Printf("缓存未命中次数: %d\n", stats.MissCount)
+	fmt.Printf("缓存命中率: %.2f%%\n", stats.HitRate)
+	fmt.Printf("内存使用量: %d 字节 (%.2f MB)\n", stats.MemoryUsage, float64(stats.MemoryUsage)/(1024*1024))
+	fmt.Printf("清理次数: %d\n", stats.EvictionCount)
+	fmt.Printf("过期项数: %d\n", stats.ExpiredItems)
+	
+	// 显示各类型缓存详情
+	fmt.Println("\n缓存类型详情:")
+	fmt.Printf("  AI分析缓存: %d 项\n", len(cacheManager.aiCache))
+	fmt.Printf("  规则匹配缓存: %d 项\n", len(cacheManager.ruleCache))
+	fmt.Printf("  配置缓存: %d 项\n", len(cacheManager.configCache))
+}
+
+// 清空所有缓存
+func handleCacheClear() {
+	fmt.Println("🗑️  清空所有缓存...")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	cacheManager.Clear()
+	fmt.Println("✅ 所有缓存已清空")
+}
+
+// 测试缓存功能
+func handleCacheTest() {
+	fmt.Println("🧪 测试缓存功能...")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 测试配置缓存
+	testKey := "test_config"
+	testValue := map[string]interface{}{
+		"test": "value",
+		"number": 123,
+		"enabled": true,
+	}
+	
+	fmt.Println("1. 测试配置缓存...")
+	cacheManager.SetConfig(testKey, testValue, 1*time.Minute)
+	
+	if cached, found := cacheManager.GetConfig(testKey); found {
+		fmt.Printf("   ✅ 配置缓存测试成功: %v\n", cached)
+	} else {
+		fmt.Println("   ❌ 配置缓存测试失败")
+	}
+	
+	// 测试AI分析缓存
+	testLogHash := generateLogHash("test log line")
+	aiResult := &AIAnalysisCache{
+		LogHash:    testLogHash,
+		Result:     "This is a test log",
+		Confidence: 0.95,
+		Model:      "gpt-4",
+		CreatedAt:  time.Now(),
+		ExpiresAt:  time.Now().Add(1 * time.Hour),
+	}
+	
+	fmt.Println("2. 测试AI分析缓存...")
+	cacheManager.SetAIAnalysis(testLogHash, aiResult)
+	
+	if cached, found := cacheManager.GetAIAnalysis(testLogHash); found {
+		fmt.Printf("   ✅ AI分析缓存测试成功: %s\n", cached.Result)
+	} else {
+		fmt.Println("   ❌ AI分析缓存测试失败")
+	}
+	
+	// 测试规则匹配缓存
+	testRuleID := "test_rule"
+	ruleResult := &RuleMatchCache{
+		LogHash:   testLogHash,
+		RuleID:    testRuleID,
+		Matched:   true,
+		Result:    &FilterResult{Action: "highlight", RuleID: testRuleID},
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}
+	
+	fmt.Println("3. 测试规则匹配缓存...")
+	cacheManager.SetRuleMatch(testLogHash, testRuleID, ruleResult)
+	
+	if cached, found := cacheManager.GetRuleMatch(testLogHash, testRuleID); found {
+		fmt.Printf("   ✅ 规则匹配缓存测试成功: %s\n", cached.Result.Action)
+	} else {
+		fmt.Println("   ❌ 规则匹配缓存测试失败")
+	}
+	
+	// 显示最终统计
+	fmt.Println("\n最终缓存统计:")
+	stats := cacheManager.GetStats()
+	fmt.Printf("  总缓存项数: %d\n", stats.TotalItems)
+	fmt.Printf("  缓存命中率: %.2f%%\n", stats.HitRate)
+	fmt.Printf("  内存使用量: %.2f KB\n", float64(stats.MemoryUsage)/1024)
+	
+	fmt.Println("\n✅ 缓存功能测试完成")
 }
