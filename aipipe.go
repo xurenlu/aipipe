@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"math/rand"
@@ -461,16 +462,16 @@ type PriorityQueue struct {
 
 // I/O配置
 type IOConfig struct {
-	BufferSize        int           `json:"buffer_size"`         // 缓冲区大小
-	BatchSize         int           `json:"batch_size"`          // 批处理大小
-	FlushInterval     time.Duration `json:"flush_interval"`      // 刷新间隔
-	AsyncIO           bool          `json:"async_io"`            // 异步I/O
-	ReadAhead         int           `json:"read_ahead"`          // 预读大小
-	WriteBehind       bool          `json:"write_behind"`        // 写后置
-	Compression       bool          `json:"compression"`         // 压缩
-	CompressionLevel  int           `json:"compression_level"`   // 压缩级别
-	CacheSize         int64         `json:"cache_size"`          // 缓存大小
-	Enabled           bool          `json:"enabled"`             // 是否启用I/O优化
+	BufferSize       int           `json:"buffer_size"`       // 缓冲区大小
+	BatchSize        int           `json:"batch_size"`        // 批处理大小
+	FlushInterval    time.Duration `json:"flush_interval"`    // 刷新间隔
+	AsyncIO          bool          `json:"async_io"`          // 异步I/O
+	ReadAhead        int           `json:"read_ahead"`        // 预读大小
+	WriteBehind      bool          `json:"write_behind"`      // 写后置
+	Compression      bool          `json:"compression"`       // 压缩
+	CompressionLevel int           `json:"compression_level"` // 压缩级别
+	CacheSize        int64         `json:"cache_size"`        // 缓存大小
+	Enabled          bool          `json:"enabled"`           // 是否启用I/O优化
 }
 
 // 异步I/O操作
@@ -484,60 +485,60 @@ type AsyncIOOperation struct {
 
 // I/O缓冲区
 type IOBuffer struct {
-	buffer     []byte
-	size       int
-	position   int
-	capacity   int
-	mutex      sync.RWMutex
-	flushChan  chan bool
-	stopChan   chan bool
+	buffer    []byte
+	size      int
+	position  int
+	capacity  int
+	mutex     sync.RWMutex
+	flushChan chan bool
+	stopChan  chan bool
 }
 
 // 批量I/O处理器
 type BatchIOProcessor struct {
-	config      IOConfig
-	buffers     map[string]*IOBuffer
-	operations  chan AsyncIOOperation
-	results     chan AsyncIOOperation
-	stopChan    chan bool
-	stats       IOStats
-	mutex       sync.RWMutex
+	config     IOConfig
+	buffers    map[string]*IOBuffer
+	operations chan AsyncIOOperation
+	results    chan AsyncIOOperation
+	stopChan   chan bool
+	stats      IOStats
+	mutex      sync.RWMutex
 }
 
 // I/O统计
 type IOStats struct {
-	ReadOperations   int64         `json:"read_operations"`
-	WriteOperations  int64         `json:"write_operations"`
-	BytesRead        int64         `json:"bytes_read"`
-	BytesWritten     int64         `json:"bytes_written"`
-	ReadLatency      time.Duration `json:"read_latency"`
-	WriteLatency     time.Duration `json:"write_latency"`
-	BufferHits       int64         `json:"buffer_hits"`
-	BufferMisses     int64         `json:"buffer_misses"`
-	FlushOperations  int64         `json:"flush_operations"`
-	ErrorCount       int64         `json:"error_count"`
-	LastFlush        time.Time     `json:"last_flush"`
-	Throughput       float64       `json:"throughput"` // 字节/秒
+	ReadOperations  int64         `json:"read_operations"`
+	WriteOperations int64         `json:"write_operations"`
+	BytesRead       int64         `json:"bytes_read"`
+	BytesWritten    int64         `json:"bytes_written"`
+	ReadLatency     time.Duration `json:"read_latency"`
+	WriteLatency    time.Duration `json:"write_latency"`
+	BufferHits      int64         `json:"buffer_hits"`
+	BufferMisses    int64         `json:"buffer_misses"`
+	FlushOperations int64         `json:"flush_operations"`
+	ErrorCount      int64         `json:"error_count"`
+	LastFlush       time.Time     `json:"last_flush"`
+	Throughput      float64       `json:"throughput"` // 字节/秒
 }
 
 // I/O优化器
 type IOOptimizer struct {
-	config     IOConfig
-	processor  *BatchIOProcessor
-	stats      IOStats
-	mutex      sync.RWMutex
-	stopChan   chan bool
+	config    IOConfig
+	processor *BatchIOProcessor
+	stats     IOStats
+	mutex     sync.RWMutex
+	stopChan  chan bool
 }
 
 // 文件监控器
 type FileMonitor struct {
-	filePath   string
-	lastSize   int64
-	lastMod    time.Time
-	watcher    *fsnotify.Watcher
-	callbacks  []func(string, []byte)
-	mutex      sync.RWMutex
-	stopChan   chan bool
+	filePath  string
+	lastSize  int64
+	lastMod   time.Time
+	watcher   *fsnotify.Watcher
+	callbacks []func(string, []byte)
+	mutex     sync.RWMutex
+	stopChan  chan bool
 }
 
 // 压缩器
@@ -550,11 +551,11 @@ type Compressor struct {
 
 // 缓存管理器
 type IOCacheManager struct {
-	cache      map[string][]byte
-	maxSize    int64
+	cache       map[string][]byte
+	maxSize     int64
 	currentSize int64
-	stats      IOStats
-	mutex      sync.RWMutex
+	stats       IOStats
+	mutex       sync.RWMutex
 }
 
 // 任务调度器
@@ -598,9 +599,13 @@ type Config struct {
 
 	// 并发控制配置
 	Concurrency ConcurrencyConfig `json:"concurrency"` // 并发控制配置
-	
+
 	// I/O优化配置
-	IO IOConfig `json:"io"` // I/O优化配置
+	IO IOConfig `json:"io"`
+
+	// 用户体验配置
+	OutputFormat OutputFormat   `json:"output_format"`
+	LogLevel     LogLevelConfig `json:"log_level"` // I/O优化配置
 }
 
 // 错误级别
@@ -1365,16 +1370,37 @@ var defaultConfig = Config{
 		Enabled:               true,
 	},
 	IO: IOConfig{
-		BufferSize:        64 * 1024,  // 64KB
-		BatchSize:         1000,
-		FlushInterval:     5 * time.Second,
-		AsyncIO:           true,
-		ReadAhead:         32 * 1024,  // 32KB
-		WriteBehind:       true,
-		Compression:       false,
-		CompressionLevel:  6,
-		CacheSize:         10 * 1024 * 1024, // 10MB
-		Enabled:           true,
+		BufferSize:       64 * 1024, // 64KB
+		BatchSize:        1000,
+		FlushInterval:    5 * time.Second,
+		AsyncIO:          true,
+		ReadAhead:        32 * 1024, // 32KB
+		WriteBehind:      true,
+		Compression:      false,
+		CompressionLevel: 6,
+		CacheSize:        10 * 1024 * 1024, // 10MB
+		Enabled:          true,
+	},
+
+	// 用户体验配置
+	OutputFormat: OutputFormat{
+		Type:     "table",
+		Template: "",
+		Color:    true,
+		Filter:   "",
+		Width:    120,
+		Headers:  true,
+	},
+	LogLevel: LogLevelConfig{
+		Level:     "info",
+		ShowDebug: false,
+		ShowInfo:  true,
+		ShowWarn:  true,
+		ShowError: true,
+		ShowFatal: true,
+		MinLevel:  "info",
+		MaxLevel:  "fatal",
+		Enabled:   true,
 	},
 }
 
@@ -1404,6 +1430,9 @@ var concurrencyController *ConcurrencyController
 
 // 全局I/O优化器
 var ioOptimizer *IOOptimizer
+
+// 全局配置向导
+var configWizard *ConfigWizard
 
 // 批处理配置
 const (
@@ -1543,11 +1572,18 @@ var (
 	concurrencyStats = flag.Bool("concurrency-stats", false, "显示并发控制统计信息")
 	concurrencyTest  = flag.Bool("concurrency-test", false, "测试并发控制功能")
 	backpressureTest = flag.Bool("backpressure-test", false, "测试背压控制功能")
-	
+
 	// I/O管理命令
 	ioStats = flag.Bool("io-stats", false, "显示I/O统计信息")
 	ioTest  = flag.Bool("io-test", false, "测试I/O优化功能")
 	ioFlush = flag.Bool("io-flush", false, "强制刷新I/O缓冲区")
+
+	// 用户体验命令
+	configInit     = flag.Bool("config-init", false, "启动配置向导")
+	configTemplate = flag.Bool("config-template", false, "显示配置模板")
+	outputFormat   = flag.String("output-format", "", "输出格式 (json, csv, table, custom)")
+	outputColor    = flag.Bool("output-color", true, "启用颜色输出")
+	logLevel       = flag.String("log-level", "", "日志级别 (debug, info, warn, error, fatal)")
 
 	// journalctl 特定配置
 	journalServices = flag.String("journal-services", "", "监控的systemd服务列表，逗号分隔 (如: nginx,docker,postgresql)")
@@ -1775,19 +1811,29 @@ func main() {
 		handleBackpressureTest()
 		return
 	}
-	
+
 	if *ioStats {
 		handleIOStats()
 		return
 	}
-	
+
 	if *ioTest {
 		handleIOTest()
 		return
 	}
-	
+
 	if *ioFlush {
 		handleIOFlush()
+		return
+	}
+
+	if *configInit {
+		handleConfigInit()
+		return
+	}
+
+	if *configTemplate {
+		handleConfigTemplate()
 		return
 	}
 
@@ -7450,7 +7496,7 @@ func NewIOOptimizer(config IOConfig) *IOOptimizer {
 		config:   config,
 		stopChan: make(chan bool),
 	}
-	
+
 	// 创建批量I/O处理器
 	io.processor = &BatchIOProcessor{
 		config:     config,
@@ -7459,12 +7505,12 @@ func NewIOOptimizer(config IOConfig) *IOOptimizer {
 		results:    make(chan AsyncIOOperation, 1000),
 		stopChan:   make(chan bool),
 	}
-	
+
 	// 启动I/O处理器
 	if config.Enabled {
 		go io.startIOProcessor()
 	}
-	
+
 	return io
 }
 
@@ -7472,7 +7518,7 @@ func NewIOOptimizer(config IOConfig) *IOOptimizer {
 func (io *IOOptimizer) startIOProcessor() {
 	// 启动批量处理
 	go io.processor.startBatchProcessing()
-	
+
 	// 启动定期刷新
 	if io.config.FlushInterval > 0 {
 		go io.startPeriodicFlush()
@@ -7483,7 +7529,7 @@ func (io *IOOptimizer) startIOProcessor() {
 func (bp *BatchIOProcessor) startBatchProcessing() {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case op := <-bp.operations:
@@ -7500,7 +7546,7 @@ func (bp *BatchIOProcessor) startBatchProcessing() {
 func (bp *BatchIOProcessor) processOperation(op AsyncIOOperation) {
 	bp.mutex.Lock()
 	defer bp.mutex.Unlock()
-	
+
 	switch op.Type {
 	case "read":
 		bp.handleReadOperation(op)
@@ -7514,20 +7560,20 @@ func (bp *BatchIOProcessor) processOperation(op AsyncIOOperation) {
 // 处理读操作
 func (bp *BatchIOProcessor) handleReadOperation(op AsyncIOOperation) {
 	start := time.Now()
-	
+
 	// 模拟异步读操作
 	go func() {
 		// 这里应该实现实际的异步读操作
 		data := make([]byte, len(op.Data))
 		copy(data, op.Data)
-		
+
 		// 更新统计
 		bp.mutex.Lock()
 		bp.stats.ReadOperations++
 		bp.stats.BytesRead += int64(len(data))
 		bp.stats.ReadLatency = time.Since(start)
 		bp.mutex.Unlock()
-		
+
 		// 调用回调
 		if op.Callback != nil {
 			op.Callback(data, nil)
@@ -7538,18 +7584,18 @@ func (bp *BatchIOProcessor) handleReadOperation(op AsyncIOOperation) {
 // 处理写操作
 func (bp *BatchIOProcessor) handleWriteOperation(op AsyncIOOperation) {
 	start := time.Now()
-	
+
 	// 模拟异步写操作
 	go func() {
 		// 这里应该实现实际的异步写操作
-		
+
 		// 更新统计
 		bp.mutex.Lock()
 		bp.stats.WriteOperations++
 		bp.stats.BytesWritten += int64(len(op.Data))
 		bp.stats.WriteLatency = time.Since(start)
 		bp.mutex.Unlock()
-		
+
 		// 调用回调
 		if op.Callback != nil {
 			op.Callback(nil, nil)
@@ -7561,10 +7607,10 @@ func (bp *BatchIOProcessor) handleWriteOperation(op AsyncIOOperation) {
 func (bp *BatchIOProcessor) handleFlushOperation(op AsyncIOOperation) {
 	bp.mutex.Lock()
 	defer bp.mutex.Unlock()
-	
+
 	bp.stats.FlushOperations++
 	bp.stats.LastFlush = time.Now()
-	
+
 	// 刷新所有缓冲区
 	for _, buffer := range bp.buffers {
 		buffer.Flush()
@@ -7575,7 +7621,7 @@ func (bp *BatchIOProcessor) handleFlushOperation(op AsyncIOOperation) {
 func (bp *BatchIOProcessor) flushBuffers() {
 	bp.mutex.Lock()
 	defer bp.mutex.Unlock()
-	
+
 	for _, buffer := range bp.buffers {
 		if buffer.size > 0 {
 			buffer.Flush()
@@ -7587,7 +7633,7 @@ func (bp *BatchIOProcessor) flushBuffers() {
 func (io *IOOptimizer) startPeriodicFlush() {
 	ticker := time.NewTicker(io.config.FlushInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -7607,7 +7653,7 @@ func (io *IOOptimizer) AsyncRead(id string, data []byte, callback func([]byte, e
 		}
 		return
 	}
-	
+
 	op := AsyncIOOperation{
 		ID:        id,
 		Type:      "read",
@@ -7615,7 +7661,7 @@ func (io *IOOptimizer) AsyncRead(id string, data []byte, callback func([]byte, e
 		Callback:  callback,
 		Timestamp: time.Now(),
 	}
-	
+
 	select {
 	case io.processor.operations <- op:
 		// 操作已提交
@@ -7636,7 +7682,7 @@ func (io *IOOptimizer) AsyncWrite(id string, data []byte, callback func([]byte, 
 		}
 		return
 	}
-	
+
 	op := AsyncIOOperation{
 		ID:        id,
 		Type:      "write",
@@ -7644,7 +7690,7 @@ func (io *IOOptimizer) AsyncWrite(id string, data []byte, callback func([]byte, 
 		Callback:  callback,
 		Timestamp: time.Now(),
 	}
-	
+
 	select {
 	case io.processor.operations <- op:
 		// 操作已提交
@@ -7660,7 +7706,7 @@ func (io *IOOptimizer) AsyncWrite(id string, data []byte, callback func([]byte, 
 func (io *IOOptimizer) FlushAll() {
 	io.mutex.Lock()
 	defer io.mutex.Unlock()
-	
+
 	io.processor.flushBuffers()
 	io.stats.FlushOperations++
 	io.stats.LastFlush = time.Now()
@@ -7670,7 +7716,7 @@ func (io *IOOptimizer) FlushAll() {
 func (io *IOOptimizer) GetStats() IOStats {
 	io.mutex.RLock()
 	defer io.mutex.RUnlock()
-	
+
 	// 更新吞吐量
 	if io.stats.ReadOperations > 0 || io.stats.WriteOperations > 0 {
 		totalBytes := io.stats.BytesRead + io.stats.BytesWritten
@@ -7679,7 +7725,7 @@ func (io *IOOptimizer) GetStats() IOStats {
 			io.stats.Throughput = float64(totalBytes) / totalTime.Seconds()
 		}
 	}
-	
+
 	return io.stats
 }
 
@@ -7697,16 +7743,16 @@ func NewIOBuffer(capacity int) *IOBuffer {
 func (buf *IOBuffer) Write(data []byte) (int, error) {
 	buf.mutex.Lock()
 	defer buf.mutex.Unlock()
-	
+
 	if buf.position+len(data) > buf.capacity {
 		// 缓冲区已满，需要刷新
 		buf.Flush()
 	}
-	
+
 	n := copy(buf.buffer[buf.position:], data)
 	buf.position += n
 	buf.size += n
-	
+
 	return n, nil
 }
 
@@ -7714,7 +7760,7 @@ func (buf *IOBuffer) Write(data []byte) (int, error) {
 func (buf *IOBuffer) Flush() {
 	buf.mutex.Lock()
 	defer buf.mutex.Unlock()
-	
+
 	if buf.size > 0 {
 		// 这里应该实现实际的刷新操作
 		buf.position = 0
@@ -7735,7 +7781,7 @@ func NewFileMonitor(filePath string) *FileMonitor {
 func (fm *FileMonitor) AddCallback(callback func(string, []byte)) {
 	fm.mutex.Lock()
 	defer fm.mutex.Unlock()
-	
+
 	fm.callbacks = append(fm.callbacks, callback)
 }
 
@@ -7745,17 +7791,17 @@ func (fm *FileMonitor) Start() error {
 	if err != nil {
 		return err
 	}
-	
+
 	fm.watcher = watcher
-	
+
 	// 添加文件监控
 	if err := watcher.Add(fm.filePath); err != nil {
 		return err
 	}
-	
+
 	// 启动监控协程
 	go fm.monitor()
-	
+
 	return nil
 }
 
@@ -7784,13 +7830,13 @@ func (fm *FileMonitor) handleFileChange() {
 	if err != nil {
 		return
 	}
-	
+
 	// 调用所有回调
 	fm.mutex.RLock()
 	callbacks := make([]func(string, []byte), len(fm.callbacks))
 	copy(callbacks, fm.callbacks)
 	fm.mutex.RUnlock()
-	
+
 	for _, callback := range callbacks {
 		callback(fm.filePath, data)
 	}
@@ -7810,13 +7856,13 @@ func (fm *FileMonitor) Stop() {
 func handleIOStats() {
 	fmt.Println("💾 I/O统计信息:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	stats := ioOptimizer.GetStats()
 	fmt.Printf("读操作次数: %d\n", stats.ReadOperations)
 	fmt.Printf("写操作次数: %d\n", stats.WriteOperations)
@@ -7830,7 +7876,7 @@ func handleIOStats() {
 	fmt.Printf("错误次数: %d\n", stats.ErrorCount)
 	fmt.Printf("上次刷新: %v\n", stats.LastFlush.Format("2006-01-02 15:04:05"))
 	fmt.Printf("吞吐量: %.2f 字节/秒\n", stats.Throughput)
-	
+
 	// 显示配置信息
 	fmt.Println("\nI/O配置:")
 	fmt.Printf("  缓冲区大小: %d 字节\n", globalConfig.IO.BufferSize)
@@ -7849,17 +7895,17 @@ func handleIOStats() {
 func handleIOTest() {
 	fmt.Println("🧪 测试I/O优化功能...")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 测试I/O缓冲区
 	fmt.Println("1. 测试I/O缓冲区...")
 	buffer := NewIOBuffer(1024)
-	
+
 	testData := []byte("Hello, World!")
 	n, err := buffer.Write(testData)
 	if err != nil {
@@ -7867,10 +7913,10 @@ func handleIOTest() {
 	} else {
 		fmt.Printf("   ✅ 缓冲区写入成功，写入 %d 字节\n", n)
 	}
-	
+
 	// 测试异步I/O操作
 	fmt.Println("2. 测试异步I/O操作...")
-	
+
 	// 异步读操作
 	ioOptimizer.AsyncRead("test_read", testData, func(data []byte, err error) {
 		if err != nil {
@@ -7879,7 +7925,7 @@ func handleIOTest() {
 			fmt.Printf("   ✅ 异步读操作成功，读取 %d 字节\n", len(data))
 		}
 	})
-	
+
 	// 异步写操作
 	ioOptimizer.AsyncWrite("test_write", testData, func(data []byte, err error) {
 		if err != nil {
@@ -7888,19 +7934,19 @@ func handleIOTest() {
 			fmt.Println("   ✅ 异步写操作成功")
 		}
 	})
-	
+
 	// 等待异步操作完成
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// 测试文件监控器
 	fmt.Println("3. 测试文件监控器...")
 	monitor := NewFileMonitor("/tmp/test.log")
-	
+
 	// 添加回调
 	monitor.AddCallback(func(filePath string, data []byte) {
 		fmt.Printf("   📁 文件变化: %s，大小: %d 字节\n", filePath, len(data))
 	})
-	
+
 	// 启动监控
 	if err := monitor.Start(); err != nil {
 		fmt.Printf("   ❌ 文件监控启动失败: %v\n", err)
@@ -7910,48 +7956,161 @@ func handleIOTest() {
 		monitor.Stop()
 		fmt.Println("   ✅ 文件监控停止成功")
 	}
-	
+
 	// 测试批量刷新
 	fmt.Println("4. 测试批量刷新...")
 	ioOptimizer.FlushAll()
 	fmt.Println("   ✅ 批量刷新完成")
-	
+
 	// 显示最终统计
 	fmt.Println("\n最终I/O统计:")
 	stats := ioOptimizer.GetStats()
 	fmt.Printf("  读操作次数: %d\n", stats.ReadOperations)
 	fmt.Printf("  写操作次数: %d\n", stats.WriteOperations)
 	fmt.Printf("  吞吐量: %.2f 字节/秒\n", stats.Throughput)
-	
+
 	fmt.Println("\n✅ I/O优化功能测试完成")
 }
 
 // 强制刷新I/O缓冲区
 func handleIOFlush() {
 	fmt.Println("🔄 强制刷新I/O缓冲区...")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 获取刷新前统计
 	statsBefore := ioOptimizer.GetStats()
-	fmt.Printf("刷新前统计: 读操作 %d，写操作 %d\n", 
+	fmt.Printf("刷新前统计: 读操作 %d，写操作 %d\n",
 		statsBefore.ReadOperations, statsBefore.WriteOperations)
-	
+
 	// 强制刷新
 	start := time.Now()
 	ioOptimizer.FlushAll()
 	elapsed := time.Since(start)
-	
+
 	// 获取刷新后统计
 	statsAfter := ioOptimizer.GetStats()
-	fmt.Printf("刷新后统计: 读操作 %d，写操作 %d\n", 
+	fmt.Printf("刷新后统计: 读操作 %d，写操作 %d\n",
 		statsAfter.ReadOperations, statsAfter.WriteOperations)
 	fmt.Printf("刷新时间: %v\n", elapsed)
 	fmt.Printf("刷新操作次数: %d\n", statsAfter.FlushOperations)
-	
+
 	fmt.Println("✅ I/O缓冲区刷新完成")
+}
+
+// 用户体验相关结构
+
+// 输出格式配置
+type OutputFormat struct {
+	Type     string `json:"type"`     // json, csv, table, custom
+	Template string `json:"template"` // 自定义模板
+	Color    bool   `json:"color"`    // 颜色支持
+	Filter   string `json:"filter"`   // 输出过滤
+	Width    int    `json:"width"`    // 表格宽度
+	Headers  bool   `json:"headers"`  // 显示表头
+}
+
+// 日志级别配置
+type LogLevelConfig struct {
+	Level     string `json:"level"`      // debug, info, warn, error, fatal
+	ShowDebug bool   `json:"show_debug"` // 显示调试日志
+	ShowInfo  bool   `json:"show_info"`  // 显示信息日志
+	ShowWarn  bool   `json:"show_warn"`  // 显示警告日志
+	ShowError bool   `json:"show_error"` // 显示错误日志
+	ShowFatal bool   `json:"show_fatal"` // 显示致命日志
+	MinLevel  string `json:"min_level"`  // 最小日志级别
+	MaxLevel  string `json:"max_level"`  // 最大日志级别
+	Enabled   bool   `json:"enabled"`    // 是否启用日志级别过滤
+}
+
+// 配置向导
+type ConfigWizard struct {
+	steps       []WizardStep
+	currentStep int
+	config      Config
+	responses   map[string]interface{}
+	mutex       sync.RWMutex
+}
+
+// 向导步骤
+type WizardStep struct {
+	ID          string                  `json:"id"`
+	Title       string                  `json:"title"`
+	Description string                  `json:"description"`
+	Type        string                  `json:"type"` // input, select, confirm, file
+	Options     []WizardOption          `json:"options"`
+	Required    bool                    `json:"required"`
+	Default     interface{}             `json:"default"`
+	Validation  func(interface{}) error `json:"-"`
+}
+
+// 向导选项
+type WizardOption struct {
+	Value       string `json:"value"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// 配置模板
+type ConfigTemplate struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Config      Config `json:"config"`
+	Category    string `json:"category"`
+}
+
+// 输出格式化器
+type OutputFormatter struct {
+	format   OutputFormat
+	template *template.Template
+	mutex    sync.RWMutex
+}
+
+// 颜色支持
+type ColorSupport struct {
+	Enabled bool
+	Colors  map[string]string
+}
+
+// 交互式提示
+type InteractivePrompt struct {
+	message   string
+	options   []string
+	validator func(string) error
+}
+
+// 配置验证器
+type ConfigValidator struct {
+	rules    []ValidationRule
+	errors   []ValidationError
+	warnings []ValidationWarning
+}
+
+// 验证规则
+type ValidationRule struct {
+	Field    string
+	Required bool
+	Type     string
+	Min      interface{}
+	Max      interface{}
+	Pattern  string
+	Custom   func(interface{}) error
+}
+
+// 验证错误
+type ValidationError struct {
+	Field   string
+	Message string
+	Value   interface{}
+}
+
+// 验证警告
+type ValidationWarning struct {
+	Field   string
+	Message string
+	Value   interface{}
 }
