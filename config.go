@@ -665,7 +665,7 @@ func NewOutputFormatter(format OutputFormat) *OutputFormatter {
 	formatter := &OutputFormatter{
 		format: format,
 	}
-	
+
 	// 如果有自定义模板，解析它
 	if format.Template != "" {
 		tmpl, err := template.New("output").Parse(format.Template)
@@ -673,7 +673,7 @@ func NewOutputFormatter(format OutputFormat) *OutputFormatter {
 			formatter.template = tmpl
 		}
 	}
-	
+
 	return formatter
 }
 
@@ -681,7 +681,7 @@ func NewOutputFormatter(format OutputFormat) *OutputFormatter {
 func (of *OutputFormatter) Format(data interface{}) (string, error) {
 	of.mutex.RLock()
 	defer of.mutex.RUnlock()
-	
+
 	switch of.format.Type {
 	case "json":
 		return of.formatJSON(data)
@@ -722,7 +722,7 @@ func (of *OutputFormatter) formatCustom(data interface{}) (string, error) {
 	if of.template == nil {
 		return fmt.Sprintf("%+v", data), nil
 	}
-	
+
 	var buf bytes.Buffer
 	if err := of.template.Execute(&buf, data); err != nil {
 		return "", err
