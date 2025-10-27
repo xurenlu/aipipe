@@ -3,6 +3,37 @@
   "token": "your-api-token-here",
   "model": "gpt-4",
   "custom_prompt": "请特别注意以下情况：\n1. 数据库连接问题\n2. 内存泄漏警告\n3. 安全相关日志\n4. 性能瓶颈指标\n\n请根据这些特殊要求调整判断标准。",
+  "max_retries": 3,
+  "timeout": 30,
+  "rate_limit": 100,
+  "local_filter": true,
+  "ai_services": [
+    {
+      "name": "openai",
+      "endpoint": "https://api.openai.com/v1/chat/completions",
+      "token": "sk-your-openai-token",
+      "model": "gpt-4",
+      "priority": 1,
+      "enabled": true
+    },
+    {
+      "name": "azure",
+      "endpoint": "https://your-resource.openai.azure.com/openai/deployments/gpt-4/chat/completions?api-version=2024-02-15-preview",
+      "token": "your-azure-key",
+      "model": "gpt-4",
+      "priority": 2,
+      "enabled": true
+    },
+    {
+      "name": "anthropic",
+      "endpoint": "https://api.anthropic.com/v1/messages",
+      "token": "sk-ant-your-anthropic-token",
+      "model": "claude-3-sonnet-20240229",
+      "priority": 3,
+      "enabled": false
+    }
+  ],
+  "default_ai": "openai",
   "notifiers": {
     "email": {
       "enabled": false,

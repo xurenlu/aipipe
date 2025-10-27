@@ -57,13 +57,451 @@ type NotifierConfig struct {
 	CustomWebhooks []WebhookConfig `json:"custom_webhooks,omitempty"`
 }
 
+// AI 服务配置
+type AIService struct {
+	Name     string `json:"name"`      // 服务名称
+	Endpoint string `json:"endpoint"`  // API 端点
+	Token    string `json:"token"`     // API Token
+	Model    string `json:"model"`     // 模型名称
+	Priority int    `json:"priority"`  // 优先级（数字越小优先级越高）
+	Enabled  bool   `json:"enabled"`   // 是否启用
+}
+
+// AI 服务管理器
+type AIServiceManager struct {
+	services    []AIService
+	current     int
+	fallback    bool
+	rateLimiter map[string]time.Time
+	mutex       sync.RWMutex
+}
+
 // 配置文件结构
 type Config struct {
-	AIEndpoint   string         `json:"ai_endpoint"`
-	Token        string         `json:"token"`
-	Model        string         `json:"model"`
+	AIEndpoint   string         `json:"ai_endpoint"`   // 向后兼容
+	Token        string         `json:"token"`         // 向后兼容
+	Model        string         `json:"model"`         // 向后兼容
 	CustomPrompt string         `json:"custom_prompt"`
 	Notifiers    NotifierConfig `json:"notifiers"`
+	
+	// 新增配置项
+	MaxRetries   int  `json:"max_retries"`   // API 重试次数
+	Timeout      int  `json:"timeout"`       // 请求超时时间（秒）
+	RateLimit    int  `json:"rate_limit"`    // 请求频率限制（每分钟）
+	LocalFilter  bool `json:"local_filter"`  // 是否启用本地过滤
+	
+	// 多AI服务支持
+	AIServices []AIService `json:"ai_services"` // AI 服务列表
+	DefaultAI  string      `json:"default_ai"`  // 默认AI服务名称
+}
+
+// 错误级别
+type ErrorLevel int
+
+const (
+	ErrorLevelInfo ErrorLevel = iota
+	ErrorLevelWarning
+	ErrorLevelError
+	ErrorLevelCritical
+)
+
+// 错误分类
+type ErrorCategory string
+
+const (
+	ErrorCategoryConfig     ErrorCategory = "config"
+	ErrorCategoryNetwork    ErrorCategory = "network"
+	ErrorCategoryAI         ErrorCategory = "ai"
+	ErrorCategoryProcessing ErrorCategory = "processing"
+	ErrorCategoryOutput     ErrorCategory = "output"
+	ErrorCategoryFile       ErrorCategory = "file"
+)
+
+// AIPipe 错误结构
+type AIPipeError struct {
+	Code        string                 `json:"code"`
+	Category    ErrorCategory          `json:"category"`
+	Level       ErrorLevel             `json:"level"`
+	Message     string                 `json:"message"`
+	Suggestion  string                 `json:"suggestion"`
+	Context     map[string]interface{} `json:"context"`
+	Timestamp   time.Time              `json:"timestamp"`
+	StackTrace  string                 `json:"stack_trace"`
+}
+
+func (e *AIPipeError) Error() string {
+	return fmt.Sprintf("[%s] %s: %s", e.Category, e.Code, e.Message)
+}
+
+// 配置验证错误
+type ConfigValidationError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+	Value   string `json:"value"`
+}
+
+func (e *ConfigValidationError) Error() string {
+	return fmt.Sprintf("配置验证失败 [%s]: %s (当前值: %s)", e.Field, e.Message, e.Value)
+}
+
+// 错误恢复策略
+type ErrorRecovery struct {
+	strategies map[ErrorCategory]RecoveryStrategy
+	maxRetries int
+	backoff    time.Duration
+}
+
+type RecoveryStrategy interface {
+	CanRecover(err error) bool
+	Recover(err error) error
+}
+
+// 网络错误恢复策略
+type NetworkErrorRecovery struct {
+	maxRetries int
+	backoff    time.Duration
+}
+
+func (ner *NetworkErrorRecovery) CanRecover(err error) bool {
+	// 检查是否是网络相关错误
+	return strings.Contains(err.Error(), "timeout") ||
+		strings.Contains(err.Error(), "connection") ||
+		strings.Contains(err.Error(), "network")
+}
+
+func (ner *NetworkErrorRecovery) Recover(err error) error {
+	// 实现网络错误恢复逻辑
+	time.Sleep(ner.backoff)
+	return nil
+}
+
+// 配置错误恢复策略
+type ConfigErrorRecovery struct {
+	fallbackConfig *Config
+	validator      *ConfigValidator
+}
+
+func (cer *ConfigErrorRecovery) CanRecover(err error) bool {
+	return strings.Contains(err.Error(), "config") || strings.Contains(err.Error(), "配置文件")
+}
+
+func (cer *ConfigErrorRecovery) Recover(err error) error {
+	// 使用默认配置
+	globalConfig = *cer.fallbackConfig
+	return nil
+}
+
+// 错误处理器
+type ErrorHandler struct {
+	recovery *ErrorRecovery
+	logger   *log.Logger
+}
+
+func NewErrorHandler() *ErrorHandler {
+	return &ErrorHandler{
+		recovery: &ErrorRecovery{
+			strategies: make(map[ErrorCategory]RecoveryStrategy),
+			maxRetries: 3,
+			backoff:    time.Second * 2,
+		},
+		logger: log.New(os.Stderr, "[ERROR] ", log.LstdFlags),
+	}
+}
+
+func (eh *ErrorHandler) RegisterStrategy(category ErrorCategory, strategy RecoveryStrategy) {
+	eh.recovery.strategies[category] = strategy
+}
+
+func (eh *ErrorHandler) Handle(err error, context map[string]interface{}) error {
+	// 创建 AIPipe 错误
+	aipipeErr := &AIPipeError{
+		Code:       "UNKNOWN_ERROR",
+		Category:   ErrorCategoryProcessing,
+		Level:      ErrorLevelError,
+		Message:    err.Error(),
+		Context:    context,
+		Timestamp:  time.Now(),
+		StackTrace: getStackTrace(),
+	}
+	
+	// 根据错误类型设置分类和级别
+	eh.classifyError(aipipeErr)
+	
+	// 记录错误
+	eh.logError(aipipeErr)
+	
+	// 尝试恢复
+	if strategy, exists := eh.recovery.strategies[aipipeErr.Category]; exists {
+		if strategy.CanRecover(err) {
+			if recoverErr := strategy.Recover(err); recoverErr == nil {
+				if eh.logger != nil {
+					eh.logger.Printf("错误已恢复: %s", aipipeErr.Message)
+				}
+				return nil
+			}
+		}
+	}
+	
+	return aipipeErr
+}
+
+func (eh *ErrorHandler) classifyError(err *AIPipeError) {
+	errMsg := strings.ToLower(err.Message)
+	
+	// 网络错误
+	if strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "connection") {
+		err.Category = ErrorCategoryNetwork
+		err.Level = ErrorLevelWarning
+		err.Code = "NETWORK_ERROR"
+		err.Suggestion = "检查网络连接和服务器状态"
+	}
+	
+	// AI 服务错误
+	if strings.Contains(errMsg, "api") || strings.Contains(errMsg, "ai") {
+		err.Category = ErrorCategoryAI
+		err.Level = ErrorLevelError
+		err.Code = "AI_SERVICE_ERROR"
+		err.Suggestion = "检查 AI 服务配置和 Token 有效性"
+	}
+	
+	// 配置错误
+	if strings.Contains(errMsg, "config") || strings.Contains(errMsg, "配置文件") {
+		err.Category = ErrorCategoryConfig
+		err.Level = ErrorLevelCritical
+		err.Code = "CONFIG_ERROR"
+		err.Suggestion = "检查配置文件格式和内容"
+	}
+	
+	// 文件错误
+	if strings.Contains(errMsg, "file") || strings.Contains(errMsg, "文件") {
+		err.Category = ErrorCategoryFile
+		err.Level = ErrorLevelError
+		err.Code = "FILE_ERROR"
+		err.Suggestion = "检查文件路径和权限"
+	}
+}
+
+func (eh *ErrorHandler) logError(err *AIPipeError) {
+	if eh.logger == nil {
+		return // 如果 logger 为 nil，不输出日志
+	}
+	
+	levelStr := []string{"INFO", "WARNING", "ERROR", "CRITICAL"}[err.Level]
+	eh.logger.Printf("[%s] %s: %s", levelStr, err.Category, err.Message)
+	
+	if err.Suggestion != "" {
+		eh.logger.Printf("建议: %s", err.Suggestion)
+	}
+	
+	if *debug {
+		eh.logger.Printf("上下文: %+v", err.Context)
+		eh.logger.Printf("堆栈跟踪: %s", err.StackTrace)
+	}
+}
+
+func getStackTrace() string {
+	buf := make([]byte, 1024)
+	n := runtime.Stack(buf, false)
+	return string(buf[:n])
+}
+
+// AI 服务管理器方法
+
+// 创建新的AI服务管理器
+func NewAIServiceManager(services []AIService) *AIServiceManager {
+	// 按优先级排序
+	sortedServices := make([]AIService, len(services))
+	copy(sortedServices, services)
+	
+	// 简单的冒泡排序按优先级排序
+	for i := 0; i < len(sortedServices)-1; i++ {
+		for j := 0; j < len(sortedServices)-i-1; j++ {
+			if sortedServices[j].Priority > sortedServices[j+1].Priority {
+				sortedServices[j], sortedServices[j+1] = sortedServices[j+1], sortedServices[j]
+			}
+		}
+	}
+	
+	return &AIServiceManager{
+		services:    sortedServices,
+		current:     0,
+		fallback:    false,
+		rateLimiter: make(map[string]time.Time),
+	}
+}
+
+// 获取下一个可用的AI服务
+func (asm *AIServiceManager) GetNextService() (*AIService, error) {
+	asm.mutex.Lock()
+	defer asm.mutex.Unlock()
+	
+	// 查找启用的服务
+	for i := 0; i < len(asm.services); i++ {
+		service := &asm.services[asm.current]
+		if service.Enabled {
+			// 检查频率限制
+			if asm.isRateLimited(service.Name) {
+				asm.current = (asm.current + 1) % len(asm.services)
+				continue
+			}
+			
+			// 更新当前索引
+			asm.current = (asm.current + 1) % len(asm.services)
+			return service, nil
+		}
+		asm.current = (asm.current + 1) % len(asm.services)
+	}
+	
+	return nil, fmt.Errorf("没有可用的AI服务")
+}
+
+// 检查服务是否被频率限制
+func (asm *AIServiceManager) isRateLimited(serviceName string) bool {
+	if lastCall, exists := asm.rateLimiter[serviceName]; exists {
+		// 检查是否在限制时间内
+		if time.Since(lastCall) < time.Minute/time.Duration(globalConfig.RateLimit) {
+			return true
+		}
+	}
+	return false
+}
+
+// 记录服务调用时间
+func (asm *AIServiceManager) RecordCall(serviceName string) {
+	asm.mutex.Lock()
+	defer asm.mutex.Unlock()
+	asm.rateLimiter[serviceName] = time.Now()
+}
+
+// 获取服务统计信息
+func (asm *AIServiceManager) GetStats() map[string]interface{} {
+	asm.mutex.RLock()
+	defer asm.mutex.RUnlock()
+	
+	stats := map[string]interface{}{
+		"total_services": len(asm.services),
+		"enabled_services": 0,
+		"current_index": asm.current,
+		"fallback_mode": asm.fallback,
+	}
+	
+	for _, service := range asm.services {
+		if service.Enabled {
+			stats["enabled_services"] = stats["enabled_services"].(int) + 1
+		}
+	}
+	
+	return stats
+}
+
+// 启用/禁用服务
+func (asm *AIServiceManager) SetServiceEnabled(serviceName string, enabled bool) error {
+	asm.mutex.Lock()
+	defer asm.mutex.Unlock()
+	
+	for i := range asm.services {
+		if asm.services[i].Name == serviceName {
+			asm.services[i].Enabled = enabled
+			return nil
+		}
+	}
+	
+	return fmt.Errorf("服务 %s 不存在", serviceName)
+}
+
+// 获取服务列表
+func (asm *AIServiceManager) GetServices() []AIService {
+	asm.mutex.RLock()
+	defer asm.mutex.RUnlock()
+	
+	services := make([]AIService, len(asm.services))
+	copy(services, asm.services)
+	return services
+}
+
+// 配置验证器
+type ConfigValidator struct {
+	errors []ConfigValidationError
+}
+
+func NewConfigValidator() *ConfigValidator {
+	return &ConfigValidator{
+		errors: make([]ConfigValidationError, 0),
+	}
+}
+
+func (cv *ConfigValidator) Validate(config *Config) error {
+	cv.errors = cv.errors[:0] // 清空之前的错误
+	
+	// 验证必填字段
+	cv.validateRequired("ai_endpoint", config.AIEndpoint)
+	cv.validateRequired("token", config.Token)
+	cv.validateRequired("model", config.Model)
+	
+	// 验证 URL 格式
+	cv.validateURL("ai_endpoint", config.AIEndpoint)
+	
+	// 验证数值范围
+	cv.validateRange("max_retries", config.MaxRetries, 0, 10)
+	cv.validateRange("timeout", config.Timeout, 5, 300)
+	cv.validateRange("rate_limit", config.RateLimit, 1, 1000)
+	
+	// 验证 Token 长度
+	cv.validateMinLength("token", config.Token, 10)
+	
+	if len(cv.errors) > 0 {
+		return fmt.Errorf("配置验证失败，发现 %d 个错误", len(cv.errors))
+	}
+	
+	return nil
+}
+
+func (cv *ConfigValidator) validateRequired(field, value string) {
+	if strings.TrimSpace(value) == "" {
+		cv.errors = append(cv.errors, ConfigValidationError{
+			Field:   field,
+			Message: "此字段为必填项",
+			Value:   value,
+		})
+	}
+}
+
+func (cv *ConfigValidator) validateURL(field, value string) {
+	if value == "" {
+		return
+	}
+	
+	if !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
+		cv.errors = append(cv.errors, ConfigValidationError{
+			Field:   field,
+			Message: "必须是有效的 URL 格式",
+			Value:   value,
+		})
+	}
+}
+
+func (cv *ConfigValidator) validateRange(field string, value, min, max int) {
+	if value < min || value > max {
+		cv.errors = append(cv.errors, ConfigValidationError{
+			Field:   field,
+			Message: fmt.Sprintf("值必须在 %d 到 %d 之间", min, max),
+			Value:   fmt.Sprintf("%d", value),
+		})
+	}
+}
+
+func (cv *ConfigValidator) validateMinLength(field, value string, minLen int) {
+	if len(value) < minLen {
+		cv.errors = append(cv.errors, ConfigValidationError{
+			Field:   field,
+			Message: fmt.Sprintf("长度至少为 %d 个字符", minLen),
+			Value:   fmt.Sprintf("%d", len(value)),
+		})
+	}
+}
+
+func (cv *ConfigValidator) GetErrors() []ConfigValidationError {
+	return cv.errors
 }
 
 // 默认配置
@@ -72,6 +510,10 @@ var defaultConfig = Config{
 	Token:        "your-api-token-here",
 	Model:        "gpt-4",
 	CustomPrompt: "",
+	MaxRetries:   3,
+	Timeout:      30,
+	RateLimit:    100,
+	LocalFilter:  true,
 	Notifiers: NotifierConfig{
 		Email: EmailConfig{
 			Enabled:   false,
@@ -105,6 +547,12 @@ var defaultConfig = Config{
 
 // 全局配置变量
 var globalConfig Config
+
+// 全局错误处理器
+var errorHandler *ErrorHandler
+
+// 全局AI服务管理器
+var aiServiceManager *AIServiceManager
 
 // 批处理配置
 const (
@@ -202,6 +650,16 @@ var (
 	batchWait        = flag.Duration("batch-wait", BATCH_WAIT_TIME, "批处理等待时间")
 	showNotImportant = flag.Bool("show-not-important", false, "显示被过滤的日志（默认不显示）")
 	contextLines     = flag.Int("context", 3, "重要日志显示的上下文行数（前后各N行）")
+	
+	// 新增配置管理命令
+	configTest      = flag.Bool("config-test", false, "测试配置文件")
+	configValidate  = flag.Bool("config-validate", false, "验证配置文件")
+	configShow      = flag.Bool("config-show", false, "显示当前配置")
+	
+	// AI服务管理命令
+	aiList          = flag.Bool("ai-list", false, "列出所有AI服务")
+	aiTest          = flag.Bool("ai-test", false, "测试所有AI服务")
+	aiStats         = flag.Bool("ai-stats", false, "显示AI服务统计信息")
 
 	// journalctl 特定配置
 	journalServices = flag.String("journal-services", "", "监控的systemd服务列表，逗号分隔 (如: nginx,docker,postgresql)")
@@ -291,11 +749,357 @@ func shouldUseMultiSource() bool {
 }
 
 func main() {
-	// 使用Cobra命令管理
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+	flag.Parse()
+
+	// 初始化错误处理器
+	errorHandler = NewErrorHandler()
+	errorHandler.RegisterStrategy(ErrorCategoryNetwork, &NetworkErrorRecovery{
+		maxRetries: 3,
+		backoff:    time.Second * 2,
+	})
+	errorHandler.RegisterStrategy(ErrorCategoryConfig, &ConfigErrorRecovery{
+		fallbackConfig: &defaultConfig,
+		validator:      NewConfigValidator(),
+	})
+
+	// 处理配置管理命令
+	if *configTest {
+		handleConfigTest()
+		return
+	}
+	
+	if *configValidate {
+		handleConfigValidate()
+		return
+	}
+	
+	if *configShow {
+		handleConfigShow()
+		return
+	}
+	
+	if *aiList {
+		handleAIList()
+		return
+	}
+	
+	if *aiTest {
+		handleAITest()
+		return
+	}
+	
+	if *aiStats {
+		handleAIStats()
+		return
+	}
+
+	// 加载配置文件
+	if err := loadConfig(); err != nil {
+		if handledErr := errorHandler.Handle(err, map[string]interface{}{
+			"operation": "load_config",
+			"config_path": "~/.config/aipipe.json",
+		}); handledErr != nil {
+			log.Printf("⚠️  加载配置文件失败，使用默认配置: %v", err)
+			globalConfig = defaultConfig
+		}
+	}
+
+	fmt.Printf("🚀 AIPipe 启动 - 监控 %s 格式日志\n", *logFormat)
+
+	// 显示模式提示
+	if !*showNotImportant {
+		fmt.Println("💡 只显示重要日志（过滤的日志不显示）")
+		if !*verbose {
+			fmt.Println("   使用 --show-not-important 显示所有日志")
+		}
+	}
+
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	if *filePath != "" {
+		// 文件监控模式
+		fmt.Printf("📁 监控文件: %s\n", *filePath)
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		if err := watchFile(*filePath); err != nil {
+			log.Fatalf("❌ 监控文件失败: %v", err)
+		}
+	} else {
+		// 标准输入模式
+		fmt.Println("📥 从标准输入读取日志...")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		processStdin()
+	}
+}
+
+// 配置管理命令处理函数
+
+// 测试配置文件
+func handleConfigTest() {
+	fmt.Println("🧪 测试配置文件...")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
+	
+	// 测试 AI 服务连接
+	fmt.Println("🔗 测试 AI 服务连接...")
+	if err := testAIConnection(); err != nil {
+		fmt.Printf("❌ AI 服务连接失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	fmt.Println("✅ 配置文件测试通过！")
+}
+
+// 验证配置文件
+func handleConfigValidate() {
+	fmt.Println("🔍 验证配置文件...")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置验证失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	fmt.Println("✅ 配置文件验证通过！")
+}
+
+// 显示当前配置
+func handleConfigShow() {
+	fmt.Println("📋 当前配置:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 显示配置信息（隐藏敏感信息）
+	fmt.Printf("AI 端点: %s\n", globalConfig.AIEndpoint)
+	fmt.Printf("模型: %s\n", globalConfig.Model)
+	fmt.Printf("Token: %s...%s\n", globalConfig.Token[:min(8, len(globalConfig.Token))], globalConfig.Token[max(0, len(globalConfig.Token)-8):])
+	fmt.Printf("最大重试次数: %d\n", globalConfig.MaxRetries)
+	fmt.Printf("超时时间: %d 秒\n", globalConfig.Timeout)
+	fmt.Printf("频率限制: %d 次/分钟\n", globalConfig.RateLimit)
+	fmt.Printf("本地过滤: %t\n", globalConfig.LocalFilter)
+	
+	if globalConfig.CustomPrompt != "" {
+		fmt.Printf("自定义提示词: %s\n", globalConfig.CustomPrompt)
+	}
+}
+
+// AI服务管理命令处理函数
+
+// 列出所有AI服务
+func handleAIList() {
+	fmt.Println("🤖 AI 服务列表:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	services := aiServiceManager.GetServices()
+	if len(services) == 0 {
+		fmt.Println("没有配置AI服务")
+		return
+	}
+	
+	for i, service := range services {
+		status := "❌ 禁用"
+		if service.Enabled {
+			status = "✅ 启用"
+		}
+		
+		fmt.Printf("%d. %s %s\n", i+1, status, service.Name)
+		fmt.Printf("   端点: %s\n", service.Endpoint)
+		fmt.Printf("   模型: %s\n", service.Model)
+		fmt.Printf("   Token: %s...%s\n", service.Token[:min(8, len(service.Token))], service.Token[max(0, len(service.Token)-8):])
+		fmt.Printf("   优先级: %d\n", service.Priority)
+		fmt.Println()
+	}
+}
+
+// 测试所有AI服务
+func handleAITest() {
+	fmt.Println("🧪 测试所有AI服务...")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	services := aiServiceManager.GetServices()
+	if len(services) == 0 {
+		fmt.Println("没有配置AI服务")
+		return
+	}
+	
+	successCount := 0
+	for _, service := range services {
+		if !service.Enabled {
+			fmt.Printf("⏭️  跳过禁用的服务: %s\n", service.Name)
+			continue
+		}
+		
+		fmt.Printf("🔗 测试服务: %s...", service.Name)
+		
+		// 创建测试请求
+		testPrompt := "请回复 'OK' 表示连接正常"
+		reqBody := ChatRequest{
+			Model: service.Model,
+			Messages: []ChatMessage{
+				{
+					Role:    "user",
+					Content: testPrompt,
+				},
+			},
+		}
+		
+		jsonData, err := json.Marshal(reqBody)
+		if err != nil {
+			fmt.Printf(" ❌ 构建请求失败\n")
+			continue
+		}
+		
+		// 创建HTTP请求
+		req, err := http.NewRequest("POST", service.Endpoint, bytes.NewBuffer(jsonData))
+		if err != nil {
+			fmt.Printf(" ❌ 创建请求失败\n")
+			continue
+		}
+		
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("api-key", service.Token)
+		
+		// 发送请求
+		client := &http.Client{
+			Timeout: time.Duration(globalConfig.Timeout) * time.Second,
+		}
+		
+		resp, err := client.Do(req)
+		if err != nil {
+			fmt.Printf(" ❌ 请求失败: %v\n", err)
+			continue
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			fmt.Printf(" ❌ API错误 %d: %s\n", resp.StatusCode, string(body))
+			continue
+		}
+		
+		fmt.Printf(" ✅ 成功\n")
+		successCount++
+	}
+	
+	fmt.Printf("\n📊 测试结果: %d/%d 服务可用\n", successCount, len(services))
+	if successCount == 0 {
+		os.Exit(1)
+	}
+}
+
+// 显示AI服务统计信息
+func handleAIStats() {
+	fmt.Println("📊 AI 服务统计信息:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	stats := aiServiceManager.GetStats()
+	fmt.Printf("总服务数: %d\n", stats["total_services"])
+	fmt.Printf("启用服务数: %d\n", stats["enabled_services"])
+	fmt.Printf("当前索引: %d\n", stats["current_index"])
+	fmt.Printf("故障转移模式: %t\n", stats["fallback_mode"])
+	
+	// 显示服务详情
+	services := aiServiceManager.GetServices()
+	if len(services) > 0 {
+		fmt.Println("\n服务详情:")
+		for _, service := range services {
+			status := "❌ 禁用"
+			if service.Enabled {
+				status = "✅ 启用"
+			}
+			fmt.Printf("  %s %s (优先级: %d)\n", status, service.Name, service.Priority)
+		}
+	}
+}
+
+// 测试 AI 服务连接
+func testAIConnection() error {
+	// 创建一个简单的测试请求
+	testPrompt := "请回复 'OK' 表示连接正常"
+	
+	// 构建请求
+	reqBody := ChatRequest{
+		Model: globalConfig.Model,
+		Messages: []ChatMessage{
+			{
+				Role:    "user",
+				Content: testPrompt,
+			},
+		},
+	}
+	
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("构建请求失败: %w", err)
+	}
+	
+	// 创建 HTTP 请求
+	req, err := http.NewRequest("POST", globalConfig.AIEndpoint, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("创建请求失败: %w", err)
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("api-key", globalConfig.Token)
+	
+	// 发送请求
+	client := &http.Client{
+		Timeout: time.Duration(globalConfig.Timeout) * time.Second,
+	}
+	
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("API 返回错误状态码 %d: %s", resp.StatusCode, string(body))
+	}
+	
+	return nil
+}
+
+// 辅助函数
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 // 加载配置文件
@@ -327,9 +1131,18 @@ func findDefaultConfig() (string, error) {
 }
 
 func loadConfig() error {
-	configPath, err := findDefaultConfig()
-	if err != nil {
-		return fmt.Errorf("查找默认配置文件失败: %v", err)
+	var configPath string
+	var err error
+	
+	// 如果指定了配置文件路径，使用指定的路径
+	if *configFile != "" {
+		configPath = *configFile
+	} else {
+		// 否则查找默认配置文件
+		configPath, err = findDefaultConfig()
+		if err != nil {
+			return fmt.Errorf("查找默认配置文件失败: %v", err)
+		}
 	}
 
 	// 检查配置文件是否存在
@@ -352,6 +1165,45 @@ func loadConfig() error {
 	}
 	if globalConfig.Model == "" {
 		globalConfig.Model = defaultConfig.Model
+	}
+	
+	// 设置默认值
+	if globalConfig.MaxRetries == 0 {
+		globalConfig.MaxRetries = defaultConfig.MaxRetries
+	}
+	if globalConfig.Timeout == 0 {
+		globalConfig.Timeout = defaultConfig.Timeout
+	}
+	if globalConfig.RateLimit == 0 {
+		globalConfig.RateLimit = defaultConfig.RateLimit
+	}
+	
+	// 初始化AI服务管理器
+	if len(globalConfig.AIServices) > 0 {
+		// 使用新的多AI服务配置
+		aiServiceManager = NewAIServiceManager(globalConfig.AIServices)
+	} else {
+		// 向后兼容：使用旧的单服务配置
+		legacyService := AIService{
+			Name:     "default",
+			Endpoint: globalConfig.AIEndpoint,
+			Token:    globalConfig.Token,
+			Model:    globalConfig.Model,
+			Priority: 1,
+			Enabled:  true,
+		}
+		aiServiceManager = NewAIServiceManager([]AIService{legacyService})
+	}
+
+	// 验证配置
+	validator := NewConfigValidator()
+	if err := validator.Validate(&globalConfig); err != nil {
+		// 显示详细的验证错误
+		fmt.Printf("❌ 配置验证失败:\n")
+		for _, validationErr := range validator.GetErrors() {
+			fmt.Printf("  • %s: %s (当前值: %s)\n", validationErr.Field, validationErr.Message, validationErr.Value)
+		}
+		return fmt.Errorf("配置验证失败: %w", err)
 	}
 
 	if *verbose {
@@ -2206,9 +3058,18 @@ func buildBatchUserPrompt(logLines []string) string {
 
 // 调用 AI API
 func callAIAPI(systemPrompt, userPrompt string) (string, error) {
+	// 获取AI服务
+	service, err := aiServiceManager.GetNextService()
+	if err != nil {
+		return "", fmt.Errorf("获取AI服务失败: %w", err)
+	}
+	
+	// 记录服务调用
+	aiServiceManager.RecordCall(service.Name)
+	
 	// 构建请求，使用 system 和 user 两条消息
 	reqBody := ChatRequest{
-		Model: globalConfig.Model,
+		Model: service.Model,
 		Messages: []ChatMessage{
 			{
 				Role:    "system",
@@ -2231,11 +3092,12 @@ func callAIAPI(systemPrompt, userPrompt string) (string, error) {
 		fmt.Println("\n" + strings.Repeat("=", 80))
 		fmt.Println("🔍 DEBUG: HTTP 请求详情")
 		fmt.Println(strings.Repeat("=", 80))
-		fmt.Printf("URL: %s\n", globalConfig.AIEndpoint)
+		fmt.Printf("服务: %s\n", service.Name)
+		fmt.Printf("URL: %s\n", service.Endpoint)
 		fmt.Printf("Method: POST\n")
 		fmt.Printf("Headers:\n")
 		fmt.Printf("  Content-Type: application/json\n")
-		fmt.Printf("  api-key: %s...%s\n", globalConfig.Token[:10], globalConfig.Token[len(globalConfig.Token)-10:])
+		fmt.Printf("  api-key: %s...%s\n", service.Token[:min(10, len(service.Token))], service.Token[max(0, len(service.Token)-10):])
 		fmt.Printf("\nRequest Body:\n")
 		var prettyJSON bytes.Buffer
 		if err := json.Indent(&prettyJSON, jsonData, "", "  "); err == nil {
@@ -2247,17 +3109,17 @@ func callAIAPI(systemPrompt, userPrompt string) (string, error) {
 	}
 
 	// 创建 HTTP 请求
-	req, err := http.NewRequest("POST", globalConfig.AIEndpoint, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", service.Endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("api-key", globalConfig.Token)
+	req.Header.Set("api-key", service.Token)
 
 	// 发送请求
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: time.Duration(globalConfig.Timeout) * time.Second,
 	}
 
 	if *debug {
@@ -2265,17 +3127,48 @@ func callAIAPI(systemPrompt, userPrompt string) (string, error) {
 	}
 
 	startTime := time.Now()
-	resp, err := client.Do(req)
-	elapsed := time.Since(startTime)
-
-	if err != nil {
+	var resp *http.Response
+	var httpErr error
+	
+	// 重试机制
+	for i := 0; i < globalConfig.MaxRetries; i++ {
+		resp, httpErr = client.Do(req)
+		if httpErr == nil {
+			break
+		}
+		
+		// 使用错误处理器处理网络错误
+		if handledErr := errorHandler.Handle(httpErr, map[string]interface{}{
+			"operation": "ai_api_call",
+			"service":   service.Name,
+			"endpoint":  service.Endpoint,
+			"retry":     i + 1,
+			"max_retries": globalConfig.MaxRetries,
+		}); handledErr != nil {
+			if i == globalConfig.MaxRetries-1 {
+				if *debug {
+					fmt.Printf("❌ 请求失败 (重试 %d/%d): %v\n", i+1, globalConfig.MaxRetries, handledErr)
+					fmt.Println(strings.Repeat("=", 80) + "\n")
+				}
+				return "", handledErr
+			}
+			time.Sleep(time.Duration(i+1) * time.Second) // 指数退避
+		} else {
+			// 错误已恢复，重试
+			continue
+		}
+	}
+	
+	if httpErr != nil {
 		if *debug {
-			fmt.Printf("❌ 请求失败: %v\n", err)
+			fmt.Printf("❌ 请求失败: %v\n", httpErr)
 			fmt.Println(strings.Repeat("=", 80) + "\n")
 		}
-		return "", err
+		return "", httpErr
 	}
 	defer resp.Body.Close()
+	
+	elapsed := time.Since(startTime)
 
 	// 读取响应体
 	body, err := io.ReadAll(resp.Body)
@@ -2308,7 +3201,18 @@ func callAIAPI(systemPrompt, userPrompt string) (string, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API 返回错误状态码 %d: %s", resp.StatusCode, string(body))
+		apiErr := fmt.Errorf("API 返回错误状态码 %d: %s", resp.StatusCode, string(body))
+		
+		// 使用错误处理器处理 API 错误
+		if handledErr := errorHandler.Handle(apiErr, map[string]interface{}{
+			"operation": "ai_api_response",
+			"service":   service.Name,
+			"status_code": resp.StatusCode,
+			"endpoint": service.Endpoint,
+			"response_body": string(body),
+		}); handledErr != nil {
+			return "", handledErr
+		}
 	}
 
 	// 解析响应
