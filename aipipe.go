@@ -256,17 +256,6 @@ func (e *AIPipeError) Error() string {
 	return fmt.Sprintf("[%s] %s: %s", e.Category, e.Code, e.Message)
 }
 
-// 配置验证错误
-type ConfigValidationError struct {
-	Field   string `json:"field"`
-	Message string `json:"message"`
-	Value   string `json:"value"`
-}
-
-func (e *ConfigValidationError) Error() string {
-	return fmt.Sprintf("配置验证失败 [%s]: %s (当前值: %s)", e.Field, e.Message, e.Value)
-}
-
 // 错误恢复策略
 type ErrorRecovery struct {
 	strategies map[ErrorCategory]RecoveryStrategy
@@ -787,10 +776,6 @@ func (re *RuleEngine) TestRule(ruleID, testLine string) (bool, error) {
 	}
 
 	return compiled.MatchString(testLine), nil
-}
-
-func (cv *ConfigValidator) GetErrors() []ConfigValidationError {
-	return cv.errors
 }
 
 // 全局配置变量

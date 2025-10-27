@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // 邮件配置
@@ -342,4 +343,148 @@ func findMultiSourceConfig() (string, error) {
 	// 没有找到任何配置文件，返回默认路径
 	defaultPath := filepath.Join(configDir, "aipipe-sources.json")
 	return defaultPath, nil
+}
+
+// 显示当前配置
+func handleConfigShow() {
+	fmt.Println("📋 当前配置:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 显示配置信息（隐藏敏感信息）
+	fmt.Printf("AI 端点: %s\n", globalConfig.AIEndpoint)
+	fmt.Printf("模型: %s\n", globalConfig.Model)
+	if len(globalConfig.Token) > 16 {
+		fmt.Printf("Token: %s...%s\n", globalConfig.Token[:8], globalConfig.Token[len(globalConfig.Token)-8:])
+	} else {
+		fmt.Printf("Token: %s\n", strings.Repeat("*", len(globalConfig.Token)))
+	}
+	fmt.Printf("最大重试次数: %d\n", globalConfig.MaxRetries)
+	fmt.Printf("超时时间: %d 秒\n", globalConfig.Timeout)
+	fmt.Printf("频率限制: %d 次/分钟\n", globalConfig.RateLimit)
+	fmt.Printf("本地过滤: %t\n", globalConfig.LocalFilter)
+
+	if globalConfig.CustomPrompt != "" {
+		fmt.Printf("自定义提示词: %s\n", globalConfig.CustomPrompt)
+	}
+}
+
+// 创建默认配置
+func getDefaultConfig() Config {
+	return Config{
+		AIEndpoint:   "https://your-ai-server.com/api/v1/chat/completions",
+		Token:        "your-api-token-here",
+		Model:        "gpt-4",
+		CustomPrompt: "",
+		MaxRetries:   3,
+		Timeout:      30,
+		RateLimit:    100,
+		LocalFilter:  true,
+		Notifiers: NotifierConfig{
+			Email: EmailConfig{
+				Enabled:   false,
+				Provider:  "smtp",
+				Host:      "smtp.gmail.com",
+				Port:      587,
+				Username:  "",
+				Password:  "",
+				FromEmail: "",
+				ToEmails:  []string{},
+			},
+			DingTalk: WebhookConfig{
+				Enabled: false,
+				URL:     "",
+			},
+			WeChat: WebhookConfig{
+				Enabled: false,
+				URL:     "",
+			},
+			Feishu: WebhookConfig{
+				Enabled: false,
+				URL:     "",
+			},
+			Slack: WebhookConfig{
+				Enabled: false,
+				URL:     "",
+			},
+			CustomWebhooks: []WebhookConfig{},
+		},
+		Cache: CacheConfig{
+			MaxSize:         100 * 1024 * 1024, // 100MB
+			MaxItems:        1000,
+			DefaultTTL:      1 * time.Hour,
+			AITTL:           24 * time.Hour,
+			RuleTTL:         1 * time.Hour,
+			ConfigTTL:       30 * time.Minute,
+			CleanupInterval: 5 * time.Minute,
+			Enabled:         true,
+		},
+		WorkerPool: WorkerPoolConfig{
+			MaxWorkers:   4,
+			QueueSize:    100,
+			BatchSize:    10,
+			Timeout:      30 * time.Second,
+			RetryCount:   3,
+			BackoffDelay: 1 * time.Second,
+			Enabled:      true,
+		},
+		Memory: MemoryConfig{
+			MaxMemoryUsage:      512 * 1024 * 1024, // 512MB
+			GCThreshold:         256 * 1024 * 1024, // 256MB
+			StreamBufferSize:    1000,
+			ChunkSize:           100,
+			MemoryCheckInterval: 5 * time.Second,
+			AutoGC:              true,
+			MemoryLimit:         1024 * 1024 * 1024, // 1GB
+			Enabled:             true,
+		},
+		Concurrency: ConcurrencyConfig{
+			MaxConcurrency:        100,
+			BackpressureThreshold: 80,
+			LoadBalanceStrategy:   "round_robin",
+			AdaptiveScaling:       true,
+			ScaleUpThreshold:      0.8,
+			ScaleDownThreshold:    0.3,
+			MinWorkers:            2,
+			MaxWorkers:            20,
+			ScalingInterval:       30 * time.Second,
+			Enabled:               true,
+		},
+		IO: IOConfig{
+			BufferSize:       64 * 1024, // 64KB
+			BatchSize:        1000,
+			FlushInterval:    5 * time.Second,
+			AsyncIO:          true,
+			ReadAhead:        32 * 1024, // 32KB
+			WriteBehind:      true,
+			Compression:      false,
+			CompressionLevel: 6,
+			CacheSize:        10 * 1024 * 1024, // 10MB
+			Enabled:          true,
+		},
+		OutputFormat: OutputFormat{
+			Type:     "table",
+			Template: "",
+			Color:    true,
+			Filter:   "",
+			Width:    120,
+			Headers:  true,
+		},
+		LogLevel: LogLevelConfig{
+			Level:     "info",
+			ShowDebug: false,
+			ShowInfo:  true,
+			ShowWarn:  true,
+			ShowError: true,
+			ShowFatal: true,
+			MinLevel:  "info",
+			MaxLevel:  "fatal",
+			Enabled:   true,
+		},
+	}
 }
