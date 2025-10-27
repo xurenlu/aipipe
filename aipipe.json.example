@@ -110,6 +110,16 @@
     "backoff_delay": "1s",
     "enabled": true
   },
+  "memory": {
+    "max_memory_usage": 536870912,
+    "gc_threshold": 268435456,
+    "stream_buffer_size": 1000,
+    "chunk_size": 100,
+    "memory_check_interval": "5s",
+    "auto_gc": true,
+    "memory_limit": 1073741824,
+    "enabled": true
+  },
   "notifiers": {
     "email": {
       "enabled": false,

@@ -23,6 +23,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/BurntSushi/toml"
 	"github.com/fsnotify/fsnotify"
@@ -194,90 +195,166 @@ type CacheConfig struct {
 
 // 工作池配置
 type WorkerPoolConfig struct {
-	MaxWorkers    int           `json:"max_workers"`    // 最大工作协程数
-	QueueSize     int           `json:"queue_size"`     // 队列大小
-	BatchSize     int           `json:"batch_size"`     // 批处理大小
-	Timeout       time.Duration `json:"timeout"`        // 超时时间
-	RetryCount    int           `json:"retry_count"`    // 重试次数
-	BackoffDelay  time.Duration `json:"backoff_delay"`  // 退避延迟
-	Enabled       bool          `json:"enabled"`        // 是否启用
+	MaxWorkers   int           `json:"max_workers"`   // 最大工作协程数
+	QueueSize    int           `json:"queue_size"`    // 队列大小
+	BatchSize    int           `json:"batch_size"`    // 批处理大小
+	Timeout      time.Duration `json:"timeout"`       // 超时时间
+	RetryCount   int           `json:"retry_count"`   // 重试次数
+	BackoffDelay time.Duration `json:"backoff_delay"` // 退避延迟
+	Enabled      bool          `json:"enabled"`       // 是否启用
 }
 
 // 处理任务
 type ProcessingJob struct {
-	ID          string            `json:"id"`
-	Lines       []string          `json:"lines"`
-	Format      string            `json:"format"`
-	Priority    int               `json:"priority"`
-	CreatedAt   time.Time         `json:"created_at"`
-	Metadata    map[string]interface{} `json:"metadata"`
+	ID        string                 `json:"id"`
+	Lines     []string               `json:"lines"`
+	Format    string                 `json:"format"`
+	Priority  int                    `json:"priority"`
+	CreatedAt time.Time              `json:"created_at"`
+	Metadata  map[string]interface{} `json:"metadata"`
 }
 
 // 处理结果
 type ProcessingResult struct {
-	JobID         string            `json:"job_id"`
-	ProcessedLines int              `json:"processed_lines"`
-	FilteredLines  int              `json:"filtered_lines"`
-	AlertedLines   int              `json:"alerted_lines"`
-	ErrorCount     int              `json:"error_count"`
-	ProcessingTime time.Duration    `json:"processing_time"`
-	CreatedAt     time.Time        `json:"created_at"`
-	Results        []LogAnalysis    `json:"results"`
-	Errors         []string         `json:"errors"`
+	JobID          string                 `json:"job_id"`
+	ProcessedLines int                    `json:"processed_lines"`
+	FilteredLines  int                    `json:"filtered_lines"`
+	AlertedLines   int                    `json:"alerted_lines"`
+	ErrorCount     int                    `json:"error_count"`
+	ProcessingTime time.Duration          `json:"processing_time"`
+	CreatedAt      time.Time              `json:"created_at"`
+	Results        []LogAnalysis          `json:"results"`
+	Errors         []string               `json:"errors"`
 	Metadata       map[string]interface{} `json:"metadata"`
 }
 
 // 工作池统计
 type WorkerPoolStats struct {
-	TotalJobs       int64         `json:"total_jobs"`
-	CompletedJobs   int64         `json:"completed_jobs"`
-	FailedJobs      int64         `json:"failed_jobs"`
-	ActiveWorkers   int           `json:"active_workers"`
-	QueueLength     int           `json:"queue_length"`
-	AverageTime     time.Duration `json:"average_time"`
-	TotalLines      int64         `json:"total_lines"`
-	ErrorRate       float64       `json:"error_rate"`
-	Throughput      float64       `json:"throughput"` // 每秒处理行数
+	TotalJobs     int64         `json:"total_jobs"`
+	CompletedJobs int64         `json:"completed_jobs"`
+	FailedJobs    int64         `json:"failed_jobs"`
+	ActiveWorkers int           `json:"active_workers"`
+	QueueLength   int           `json:"queue_length"`
+	AverageTime   time.Duration `json:"average_time"`
+	TotalLines    int64         `json:"total_lines"`
+	ErrorRate     float64       `json:"error_rate"`
+	Throughput    float64       `json:"throughput"` // 每秒处理行数
 }
 
 // 工作池
 type WorkerPool struct {
-	config       WorkerPoolConfig
-	jobQueue     chan ProcessingJob
-	resultChan   chan ProcessingResult
-	workerPool   chan chan ProcessingJob
-	workers      []*Worker
-	quit         chan bool
-	stats        WorkerPoolStats
-	mutex        sync.RWMutex
-	startTime    time.Time
+	config     WorkerPoolConfig
+	jobQueue   chan ProcessingJob
+	resultChan chan ProcessingResult
+	workerPool chan chan ProcessingJob
+	workers    []*Worker
+	quit       chan bool
+	stats      WorkerPoolStats
+	mutex      sync.RWMutex
+	startTime  time.Time
 }
 
 // 工作协程
 type Worker struct {
-	ID          int
-	WorkerPool  chan chan ProcessingJob
-	JobChannel  chan ProcessingJob
-	Quit        chan bool
+	ID            int
+	WorkerPool    chan chan ProcessingJob
+	JobChannel    chan ProcessingJob
+	Quit          chan bool
 	WorkerPoolRef *WorkerPool
 }
 
 // 性能指标
 type PerformanceMetrics struct {
-	ProcessedLines    int64     `json:"processed_lines"`
-	FilteredLines     int64     `json:"filtered_lines"`
-	AlertedLines      int64     `json:"alerted_lines"`
-	APICalls          int64     `json:"api_calls"`
-	ProcessingTime    int64     `json:"processing_time_ms"`
-	ErrorCount        int64     `json:"error_count"`
-	CacheHits         int64     `json:"cache_hits"`
-	CacheMisses       int64     `json:"cache_misses"`
-	MemoryUsage       int64     `json:"memory_usage_bytes"`
-	LastUpdated       time.Time `json:"last_updated"`
-	Throughput        float64   `json:"throughput"`        // 每秒处理行数
-	AverageLatency    float64   `json:"average_latency"`   // 平均延迟(ms)
-	ErrorRate         float64   `json:"error_rate"`        // 错误率
-	CacheHitRate      float64   `json:"cache_hit_rate"`    // 缓存命中率
+	ProcessedLines int64     `json:"processed_lines"`
+	FilteredLines  int64     `json:"filtered_lines"`
+	AlertedLines   int64     `json:"alerted_lines"`
+	APICalls       int64     `json:"api_calls"`
+	ProcessingTime int64     `json:"processing_time_ms"`
+	ErrorCount     int64     `json:"error_count"`
+	CacheHits      int64     `json:"cache_hits"`
+	CacheMisses    int64     `json:"cache_misses"`
+	MemoryUsage    int64     `json:"memory_usage_bytes"`
+	LastUpdated    time.Time `json:"last_updated"`
+	Throughput     float64   `json:"throughput"`      // 每秒处理行数
+	AverageLatency float64   `json:"average_latency"` // 平均延迟(ms)
+	ErrorRate      float64   `json:"error_rate"`      // 错误率
+	CacheHitRate   float64   `json:"cache_hit_rate"`  // 缓存命中率
+}
+
+// 内存优化相关结构
+
+// 内存配置
+type MemoryConfig struct {
+	MaxMemoryUsage    int64         `json:"max_memory_usage"`    // 最大内存使用量（字节）
+	GCThreshold       int64         `json:"gc_threshold"`        // 垃圾回收阈值
+	StreamBufferSize  int           `json:"stream_buffer_size"`  // 流式处理缓冲区大小
+	ChunkSize         int           `json:"chunk_size"`          // 分块处理大小
+	MemoryCheckInterval time.Duration `json:"memory_check_interval"` // 内存检查间隔
+	AutoGC            bool          `json:"auto_gc"`             // 自动垃圾回收
+	MemoryLimit       int64         `json:"memory_limit"`        // 内存限制
+	Enabled           bool          `json:"enabled"`             // 是否启用内存优化
+}
+
+// 内存统计
+type MemoryStats struct {
+	CurrentUsage      int64     `json:"current_usage"`       // 当前内存使用量
+	PeakUsage         int64     `json:"peak_usage"`          // 峰值内存使用量
+	GCCount           int64     `json:"gc_count"`            // 垃圾回收次数
+	GCTime            int64     `json:"gc_time"`             // 垃圾回收时间（纳秒）
+	AllocCount        int64     `json:"alloc_count"`         // 分配次数
+	FreeCount         int64     `json:"free_count"`          // 释放次数
+	HeapSize          int64     `json:"heap_size"`           // 堆大小
+	StackSize         int64     `json:"stack_size"`          // 栈大小
+	LastGC            time.Time `json:"last_gc"`             // 上次垃圾回收时间
+	MemoryPressure    float64   `json:"memory_pressure"`     // 内存压力（0-1）
+}
+
+// 流式处理器
+type StreamProcessor struct {
+	BufferSize    int
+	ChunkSize     int
+	ProcessFunc   func([]string) error
+	Buffer        []string
+	TotalProcessed int64
+	mutex         sync.Mutex
+}
+
+// 内存管理器
+type MemoryManager struct {
+	config        MemoryConfig
+	stats         MemoryStats
+	streamProcessor *StreamProcessor
+	mutex         sync.RWMutex
+	lastGC        time.Time
+	allocations   map[uintptr]int64
+}
+
+// 内存监控器
+type MemoryMonitor struct {
+	enabled       bool
+	checkInterval time.Duration
+	threshold     int64
+	callbacks     []func(MemoryStats)
+	mutex         sync.RWMutex
+	stopChan      chan bool
+}
+
+// 内存池
+type MemoryPool struct {
+	pool          sync.Pool
+	chunkSize     int
+	maxChunks     int
+	currentChunks int
+	allocations   map[uintptr]int64
+	mutex         sync.Mutex
+}
+
+// 内存分配器
+type MemoryAllocator struct {
+	pool          *MemoryPool
+	allocations   map[uintptr]int64
+	totalAllocated int64
+	mutex         sync.RWMutex
 }
 
 // 配置文件结构
@@ -303,9 +380,12 @@ type Config struct {
 
 	// 缓存配置
 	Cache CacheConfig `json:"cache"` // 缓存配置
-	
+
 	// 工作池配置
 	WorkerPool WorkerPoolConfig `json:"worker_pool"` // 工作池配置
+	
+	// 内存优化配置
+	Memory MemoryConfig `json:"memory"` // 内存优化配置
 }
 
 // 错误级别
@@ -1047,6 +1127,16 @@ var defaultConfig = Config{
 		BackoffDelay: 1 * time.Second,
 		Enabled:      true,
 	},
+	Memory: MemoryConfig{
+		MaxMemoryUsage:     512 * 1024 * 1024, // 512MB
+		GCThreshold:        256 * 1024 * 1024, // 256MB
+		StreamBufferSize:   1000,
+		ChunkSize:          100,
+		MemoryCheckInterval: 5 * time.Second,
+		AutoGC:            true,
+		MemoryLimit:       1024 * 1024 * 1024, // 1GB
+		Enabled:           true,
+	},
 }
 
 // 全局配置变量
@@ -1066,6 +1156,9 @@ var cacheManager *CacheManager
 
 // 全局工作池管理器
 var workerPool *WorkerPool
+
+// 全局内存管理器
+var memoryManager *MemoryManager
 
 // 批处理配置
 const (
@@ -1092,12 +1185,12 @@ type ChatResponse struct {
 
 // 日志分析结果（单条）
 type LogAnalysis struct {
-	Line        string  `json:"line"`        // 日志行内容
-	Important   bool    `json:"important"`   // 是否重要
-	ShouldFilter bool   `json:"should_filter"`
-	Summary     string  `json:"summary"`
-	Reason      string  `json:"reason"`
-	Confidence  float64 `json:"confidence"`  // 置信度
+	Line         string  `json:"line"`      // 日志行内容
+	Important    bool    `json:"important"` // 是否重要
+	ShouldFilter bool    `json:"should_filter"`
+	Summary      string  `json:"summary"`
+	Reason       string  `json:"reason"`
+	Confidence   float64 `json:"confidence"` // 置信度
 }
 
 // 批量日志分析结果
@@ -1190,11 +1283,16 @@ var (
 	cacheStats = flag.Bool("cache-stats", false, "显示缓存统计信息")
 	cacheClear = flag.Bool("cache-clear", false, "清空所有缓存")
 	cacheTest  = flag.Bool("cache-test", false, "测试缓存功能")
-	
+
 	// 工作池管理命令
-	workerStats     = flag.Bool("worker-stats", false, "显示工作池统计信息")
-	workerTest      = flag.Bool("worker-test", false, "测试工作池功能")
+	workerStats      = flag.Bool("worker-stats", false, "显示工作池统计信息")
+	workerTest       = flag.Bool("worker-test", false, "测试工作池功能")
 	performanceStats = flag.Bool("perf-stats", false, "显示性能指标")
+	
+	// 内存管理命令
+	memoryStats     = flag.Bool("memory-stats", false, "显示内存统计信息")
+	memoryTest      = flag.Bool("memory-test", false, "测试内存管理功能")
+	memoryGC        = flag.Bool("memory-gc", false, "强制垃圾回收")
 
 	// journalctl 特定配置
 	journalServices = flag.String("journal-services", "", "监控的systemd服务列表，逗号分隔 (如: nginx,docker,postgresql)")
@@ -1377,19 +1475,34 @@ func main() {
 		handleCacheTest()
 		return
 	}
-	
+
 	if *workerStats {
 		handleWorkerStats()
 		return
 	}
-	
+
 	if *workerTest {
 		handleWorkerTest()
 		return
 	}
-	
+
 	if *performanceStats {
 		handlePerformanceStats()
+		return
+	}
+	
+	if *memoryStats {
+		handleMemoryStats()
+		return
+	}
+	
+	if *memoryTest {
+		handleMemoryTest()
+		return
+	}
+	
+	if *memoryGC {
+		handleMemoryGC()
 		return
 	}
 
@@ -1803,6 +1916,9 @@ func loadConfig() error {
 
 	// 初始化工作池
 	workerPool = NewWorkerPool(globalConfig.WorkerPool)
+
+	// 初始化内存管理器
+	memoryManager = NewMemoryManager(globalConfig.Memory)
 
 	// 验证配置
 	validator := NewConfigValidator()
@@ -5536,27 +5652,27 @@ func NewWorkerPool(config WorkerPoolConfig) *WorkerPool {
 		quit:       make(chan bool),
 		startTime:  time.Now(),
 	}
-	
+
 	// 创建工作协程
 	for i := 0; i < config.MaxWorkers; i++ {
 		worker := NewWorker(i, wp)
 		wp.workers = append(wp.workers, worker)
 		worker.Start()
 	}
-	
+
 	// 启动调度器
 	go wp.dispatch()
-	
+
 	return wp
 }
 
 // 创建新的工作协程
 func NewWorker(id int, wp *WorkerPool) *Worker {
 	return &Worker{
-		ID:           id,
-		WorkerPool:   wp.workerPool,
-		JobChannel:   make(chan ProcessingJob),
-		Quit:         make(chan bool),
+		ID:            id,
+		WorkerPool:    wp.workerPool,
+		JobChannel:    make(chan ProcessingJob),
+		Quit:          make(chan bool),
 		WorkerPoolRef: wp,
 	}
 }
@@ -5567,7 +5683,7 @@ func (w *Worker) Start() {
 		for {
 			// 将工作协程的通道注册到工作池
 			w.WorkerPool <- w.JobChannel
-			
+
 			select {
 			case job := <-w.JobChannel:
 				// 处理任务
@@ -5589,27 +5705,27 @@ func (w *Worker) Stop() {
 // 处理任务
 func (w *Worker) processJob(job ProcessingJob) {
 	startTime := time.Now()
-	
+
 	// 更新统计
 	w.WorkerPoolRef.mutex.Lock()
 	w.WorkerPoolRef.stats.ActiveWorkers++
 	w.WorkerPoolRef.mutex.Unlock()
-	
+
 	defer func() {
 		w.WorkerPoolRef.mutex.Lock()
 		w.WorkerPoolRef.stats.ActiveWorkers--
 		w.WorkerPoolRef.mutex.Unlock()
 	}()
-	
+
 	result := ProcessingResult{
-		JobID:         job.ID,
+		JobID:          job.ID,
 		ProcessedLines: len(job.Lines),
-		CreatedAt:     time.Now(),
-		Results:       make([]LogAnalysis, 0),
-		Errors:        make([]string, 0),
-		Metadata:      make(map[string]interface{}),
+		CreatedAt:      time.Now(),
+		Results:        make([]LogAnalysis, 0),
+		Errors:         make([]string, 0),
+		Metadata:       make(map[string]interface{}),
 	}
-	
+
 	// 处理每一行日志
 	for _, line := range job.Lines {
 		// 检查缓存
@@ -5617,15 +5733,15 @@ func (w *Worker) processJob(job ProcessingJob) {
 		if cached, found := cacheManager.GetAIAnalysis(logHash); found {
 			// 使用缓存结果
 			result.Results = append(result.Results, LogAnalysis{
-				Line:      line,
-				Important: true,
-				Reason:    cached.Result,
+				Line:       line,
+				Important:  true,
+				Reason:     cached.Result,
 				Confidence: cached.Confidence,
 			})
 			result.FilteredLines++
 			continue
 		}
-		
+
 		// 应用规则过滤
 		if globalConfig.LocalFilter && ruleEngine != nil {
 			filterResult := ruleEngine.Filter(line)
@@ -5640,7 +5756,7 @@ func (w *Worker) processJob(job ProcessingJob) {
 					result.Errors = append(result.Errors, fmt.Sprintf("分析失败: %v", err))
 					continue
 				}
-				
+
 				// 缓存结果
 				cacheResult := &AIAnalysisCache{
 					LogHash:    logHash,
@@ -5651,7 +5767,7 @@ func (w *Worker) processJob(job ProcessingJob) {
 					ExpiresAt:  time.Now().Add(globalConfig.Cache.AITTL),
 				}
 				cacheManager.SetAIAnalysis(logHash, cacheResult)
-				
+
 				result.Results = append(result.Results, *analysis)
 				if analysis.Important {
 					result.AlertedLines++
@@ -5665,7 +5781,7 @@ func (w *Worker) processJob(job ProcessingJob) {
 				result.Errors = append(result.Errors, fmt.Sprintf("分析失败: %v", err))
 				continue
 			}
-			
+
 			// 缓存结果
 			cacheResult := &AIAnalysisCache{
 				LogHash:    logHash,
@@ -5676,22 +5792,22 @@ func (w *Worker) processJob(job ProcessingJob) {
 				ExpiresAt:  time.Now().Add(globalConfig.Cache.AITTL),
 			}
 			cacheManager.SetAIAnalysis(logHash, cacheResult)
-			
+
 			result.Results = append(result.Results, *analysis)
 			if analysis.Important {
 				result.AlertedLines++
 			}
 		}
 	}
-	
+
 	result.ProcessingTime = time.Since(startTime)
-	
+
 	// 更新统计
 	w.WorkerPoolRef.mutex.Lock()
 	w.WorkerPoolRef.stats.CompletedJobs++
 	w.WorkerPoolRef.stats.TotalLines += int64(result.ProcessedLines)
 	w.WorkerPoolRef.mutex.Unlock()
-	
+
 	// 发送结果
 	w.WorkerPoolRef.resultChan <- result
 }
@@ -5705,13 +5821,13 @@ func (wp *WorkerPool) dispatch() {
 			worker := <-wp.workerPool
 			// 分配任务
 			worker <- job
-			
+
 			// 更新统计
 			wp.mutex.Lock()
 			wp.stats.TotalJobs++
 			wp.stats.QueueLength = len(wp.jobQueue)
 			wp.mutex.Unlock()
-			
+
 		case <-wp.quit:
 			// 停止所有工作协程
 			for _, worker := range wp.workers {
@@ -5727,7 +5843,7 @@ func (wp *WorkerPool) SubmitJob(job ProcessingJob) error {
 	if !wp.config.Enabled {
 		return fmt.Errorf("工作池未启用")
 	}
-	
+
 	select {
 	case wp.jobQueue <- job:
 		return nil
@@ -5745,18 +5861,18 @@ func (wp *WorkerPool) GetResult() <-chan ProcessingResult {
 func (wp *WorkerPool) GetStats() WorkerPoolStats {
 	wp.mutex.RLock()
 	defer wp.mutex.RUnlock()
-	
+
 	// 计算吞吐量
 	elapsed := time.Since(wp.startTime)
 	if elapsed > 0 {
 		wp.stats.Throughput = float64(wp.stats.TotalLines) / elapsed.Seconds()
 	}
-	
+
 	// 计算错误率
 	if wp.stats.TotalJobs > 0 {
 		wp.stats.ErrorRate = float64(wp.stats.FailedJobs) / float64(wp.stats.TotalJobs) * 100
 	}
-	
+
 	return wp.stats
 }
 
@@ -5784,7 +5900,7 @@ func NewMetricsCollector() *MetricsCollector {
 func (mc *MetricsCollector) UpdateMetrics(processed, filtered, alerted, apiCalls, errors int64, processingTime time.Duration) {
 	mc.mutex.Lock()
 	defer mc.mutex.Unlock()
-	
+
 	mc.metrics.ProcessedLines += processed
 	mc.metrics.FilteredLines += filtered
 	mc.metrics.AlertedLines += alerted
@@ -5792,18 +5908,18 @@ func (mc *MetricsCollector) UpdateMetrics(processed, filtered, alerted, apiCalls
 	mc.metrics.ErrorCount += errors
 	mc.metrics.ProcessingTime += int64(processingTime.Milliseconds())
 	mc.metrics.LastUpdated = time.Now()
-	
+
 	// 计算吞吐量
 	elapsed := time.Since(mc.metrics.LastUpdated)
 	if elapsed > 0 {
 		mc.metrics.Throughput = float64(mc.metrics.ProcessedLines) / elapsed.Seconds()
 	}
-	
+
 	// 计算平均延迟
 	if mc.metrics.ProcessedLines > 0 {
 		mc.metrics.AverageLatency = float64(mc.metrics.ProcessingTime) / float64(mc.metrics.ProcessedLines)
 	}
-	
+
 	// 计算错误率
 	if mc.metrics.ProcessedLines > 0 {
 		mc.metrics.ErrorRate = float64(mc.metrics.ErrorCount) / float64(mc.metrics.ProcessedLines) * 100
@@ -5814,10 +5930,10 @@ func (mc *MetricsCollector) UpdateMetrics(processed, filtered, alerted, apiCalls
 func (mc *MetricsCollector) UpdateCacheMetrics(hits, misses int64) {
 	mc.mutex.Lock()
 	defer mc.mutex.Unlock()
-	
+
 	mc.metrics.CacheHits += hits
 	mc.metrics.CacheMisses += misses
-	
+
 	// 计算缓存命中率
 	total := mc.metrics.CacheHits + mc.metrics.CacheMisses
 	if total > 0 {
@@ -5829,7 +5945,7 @@ func (mc *MetricsCollector) UpdateCacheMetrics(hits, misses int64) {
 func (mc *MetricsCollector) UpdateMemoryUsage(usage int64) {
 	mc.mutex.Lock()
 	defer mc.mutex.Unlock()
-	
+
 	mc.metrics.MemoryUsage = usage
 }
 
@@ -5837,7 +5953,7 @@ func (mc *MetricsCollector) UpdateMemoryUsage(usage int64) {
 func (mc *MetricsCollector) GetMetrics() PerformanceMetrics {
 	mc.mutex.RLock()
 	defer mc.mutex.RUnlock()
-	
+
 	return mc.metrics
 }
 
@@ -5847,18 +5963,18 @@ func analyzeLogLine(line, format string) (*LogAnalysis, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 设置行内容
 	analysis.Line = line
-	
+
 	// 根据ShouldFilter设置Important
 	analysis.Important = !analysis.ShouldFilter
-	
+
 	// 设置默认置信度
 	if analysis.Confidence == 0 {
 		analysis.Confidence = 0.8
 	}
-	
+
 	return analysis, nil
 }
 
@@ -5868,13 +5984,13 @@ func analyzeLogLine(line, format string) (*LogAnalysis, error) {
 func handleWorkerStats() {
 	fmt.Println("📊 工作池统计信息:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	stats := workerPool.GetStats()
 	fmt.Printf("总任务数: %d\n", stats.TotalJobs)
 	fmt.Printf("完成任务数: %d\n", stats.CompletedJobs)
@@ -5885,7 +6001,7 @@ func handleWorkerStats() {
 	fmt.Printf("总处理行数: %d\n", stats.TotalLines)
 	fmt.Printf("错误率: %.2f%%\n", stats.ErrorRate)
 	fmt.Printf("吞吐量: %.2f 行/秒\n", stats.Throughput)
-	
+
 	// 显示配置信息
 	fmt.Println("\n工作池配置:")
 	fmt.Printf("  最大工作协程数: %d\n", globalConfig.WorkerPool.MaxWorkers)
@@ -5901,13 +6017,13 @@ func handleWorkerStats() {
 func handleWorkerTest() {
 	fmt.Println("🧪 测试工作池功能...")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 创建测试任务
 	testLines := []string{
 		"2024-01-01 10:00:00 [ERROR] Database connection failed",
@@ -5916,7 +6032,7 @@ func handleWorkerTest() {
 		"2024-01-01 10:00:03 [DEBUG] Processing request",
 		"2024-01-01 10:00:04 [ERROR] File not found",
 	}
-	
+
 	job := ProcessingJob{
 		ID:        "test_job_1",
 		Lines:     testLines,
@@ -5927,18 +6043,18 @@ func handleWorkerTest() {
 			"test": true,
 		},
 	}
-	
+
 	fmt.Println("1. 提交测试任务...")
 	if err := workerPool.SubmitJob(job); err != nil {
 		fmt.Printf("   ❌ 任务提交失败: %v\n", err)
 		return
 	}
 	fmt.Println("   ✅ 任务提交成功")
-	
+
 	// 等待结果
 	fmt.Println("2. 等待处理结果...")
 	timeout := time.After(30 * time.Second)
-	
+
 	select {
 	case result := <-workerPool.GetResult():
 		fmt.Printf("   ✅ 任务处理完成: %s\n", result.JobID)
@@ -5948,32 +6064,363 @@ func handleWorkerTest() {
 		fmt.Printf("   错误数: %d\n", result.ErrorCount)
 		fmt.Printf("   处理时间: %v\n", result.ProcessingTime)
 		fmt.Printf("   结果数: %d\n", len(result.Results))
-		
+
 		if len(result.Errors) > 0 {
 			fmt.Println("   错误详情:")
 			for i, err := range result.Errors {
 				fmt.Printf("     %d. %s\n", i+1, err)
 			}
 		}
-		
+
 	case <-timeout:
 		fmt.Println("   ❌ 任务处理超时")
 		return
 	}
-	
+
 	// 显示最终统计
 	fmt.Println("\n最终工作池统计:")
 	stats := workerPool.GetStats()
 	fmt.Printf("  总任务数: %d\n", stats.TotalJobs)
 	fmt.Printf("  完成任务数: %d\n", stats.CompletedJobs)
 	fmt.Printf("  吞吐量: %.2f 行/秒\n", stats.Throughput)
-	
+
 	fmt.Println("\n✅ 工作池功能测试完成")
 }
 
 // 显示性能指标
 func handlePerformanceStats() {
 	fmt.Println("📈 性能指标:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 获取缓存统计
+	cacheStats := cacheManager.GetStats()
+
+	// 获取工作池统计
+	workerStats := workerPool.GetStats()
+
+	// 计算内存使用
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	fmt.Println("处理统计:")
+	fmt.Printf("  总处理行数: %d\n", workerStats.TotalLines)
+	fmt.Printf("  完成任务数: %d\n", workerStats.CompletedJobs)
+	fmt.Printf("  失败任务数: %d\n", workerStats.FailedJobs)
+	fmt.Printf("  错误率: %.2f%%\n", workerStats.ErrorRate)
+
+	fmt.Println("\n性能指标:")
+	fmt.Printf("  吞吐量: %.2f 行/秒\n", workerStats.Throughput)
+	fmt.Printf("  平均处理时间: %v\n", workerStats.AverageTime)
+	fmt.Printf("  活跃工作协程: %d\n", workerStats.ActiveWorkers)
+
+	fmt.Println("\n缓存统计:")
+	fmt.Printf("  缓存命中次数: %d\n", cacheStats.HitCount)
+	fmt.Printf("  缓存未命中次数: %d\n", cacheStats.MissCount)
+	fmt.Printf("  缓存命中率: %.2f%%\n", cacheStats.HitRate)
+	fmt.Printf("  总缓存项数: %d\n", cacheStats.TotalItems)
+
+	fmt.Println("\n内存使用:")
+	fmt.Printf("  当前内存使用: %.2f MB\n", float64(m.Alloc)/(1024*1024))
+	fmt.Printf("  系统内存使用: %.2f MB\n", float64(m.Sys)/(1024*1024))
+	fmt.Printf("  垃圾回收次数: %d\n", m.NumGC)
+	fmt.Printf("  垃圾回收时间: %v\n", time.Duration(m.PauseTotalNs))
+
+	fmt.Println("\n系统信息:")
+	fmt.Printf("  Go版本: %s\n", runtime.Version())
+	fmt.Printf("  CPU核心数: %d\n", runtime.NumCPU())
+	fmt.Printf("  Goroutine数: %d\n", runtime.NumGoroutine())
+}
+
+// 内存管理器方法
+
+// 创建新的内存管理器
+func NewMemoryManager(config MemoryConfig) *MemoryManager {
+	mm := &MemoryManager{
+		config:      config,
+		allocations: make(map[uintptr]int64),
+		lastGC:      time.Now(),
+	}
+	
+	// 创建流式处理器
+	mm.streamProcessor = &StreamProcessor{
+		BufferSize: config.StreamBufferSize,
+		ChunkSize:  config.ChunkSize,
+		Buffer:     make([]string, 0, config.StreamBufferSize),
+	}
+	
+	// 启动内存监控
+	if config.Enabled {
+		go mm.startMemoryMonitoring()
+	}
+	
+	return mm
+}
+
+// 启动内存监控
+func (mm *MemoryManager) startMemoryMonitoring() {
+	ticker := time.NewTicker(mm.config.MemoryCheckInterval)
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		mm.checkMemoryUsage()
+	}
+}
+
+// 检查内存使用情况
+func (mm *MemoryManager) checkMemoryUsage() {
+	mm.mutex.Lock()
+	defer mm.mutex.Unlock()
+	
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	
+	// 更新统计信息
+	mm.stats.CurrentUsage = int64(m.Alloc)
+	mm.stats.HeapSize = int64(m.HeapSys)
+	mm.stats.StackSize = int64(m.StackSys)
+	mm.stats.GCCount = int64(m.NumGC)
+	mm.stats.GCTime = int64(m.PauseTotalNs)
+	mm.stats.AllocCount = int64(m.Mallocs)
+	mm.stats.FreeCount = int64(m.Frees)
+	mm.stats.LastGC = time.Unix(0, int64(m.LastGC))
+	
+	// 更新峰值使用量
+	if mm.stats.CurrentUsage > mm.stats.PeakUsage {
+		mm.stats.PeakUsage = mm.stats.CurrentUsage
+	}
+	
+	// 计算内存压力
+	if mm.config.MemoryLimit > 0 {
+		mm.stats.MemoryPressure = float64(mm.stats.CurrentUsage) / float64(mm.config.MemoryLimit)
+	}
+	
+	// 检查是否需要垃圾回收
+	if mm.config.AutoGC && mm.stats.CurrentUsage > mm.config.GCThreshold {
+		mm.forceGC()
+	}
+}
+
+// 强制垃圾回收
+func (mm *MemoryManager) forceGC() {
+	start := time.Now()
+	runtime.GC()
+	mm.lastGC = time.Now()
+	
+	// 更新统计
+	mm.stats.GCCount++
+	mm.stats.GCTime += int64(time.Since(start).Nanoseconds())
+}
+
+// 获取内存统计信息
+func (mm *MemoryManager) GetStats() MemoryStats {
+	// 更新当前统计
+	mm.checkMemoryUsage()
+	
+	mm.mutex.RLock()
+	defer mm.mutex.RUnlock()
+	
+	return mm.stats
+}
+
+// 分配内存
+func (mm *MemoryManager) Allocate(size int64) uintptr {
+	mm.mutex.Lock()
+	defer mm.mutex.Unlock()
+	
+	// 检查内存限制
+	if mm.config.MemoryLimit > 0 && mm.stats.CurrentUsage+size > mm.config.MemoryLimit {
+		// 触发垃圾回收
+		mm.forceGC()
+		
+		// 如果仍然超限，返回0
+		if mm.stats.CurrentUsage+size > mm.config.MemoryLimit {
+			return 0
+		}
+	}
+	
+	// 分配内存（这里简化处理，实际应该使用内存池）
+	ptr := uintptr(0) // 简化实现
+	mm.allocations[ptr] = size
+	mm.stats.AllocCount++
+	
+	return ptr
+}
+
+// 释放内存
+func (mm *MemoryManager) Free(ptr uintptr) {
+	mm.mutex.Lock()
+	defer mm.mutex.Unlock()
+	
+	if size, exists := mm.allocations[ptr]; exists {
+		delete(mm.allocations, ptr)
+		mm.stats.FreeCount++
+		mm.stats.CurrentUsage -= size
+	}
+}
+
+// 流式处理日志
+func (mm *MemoryManager) ProcessStream(lines []string, processFunc func([]string) error) error {
+	if !mm.config.Enabled {
+		return processFunc(lines)
+	}
+	
+	mm.streamProcessor.mutex.Lock()
+	defer mm.streamProcessor.mutex.Unlock()
+	
+	// 添加到缓冲区
+	mm.streamProcessor.Buffer = append(mm.streamProcessor.Buffer, lines...)
+	
+	// 检查是否需要处理
+	if len(mm.streamProcessor.Buffer) >= mm.streamProcessor.ChunkSize {
+		// 处理当前块
+		chunk := make([]string, mm.streamProcessor.ChunkSize)
+		copy(chunk, mm.streamProcessor.Buffer[:mm.streamProcessor.ChunkSize])
+		
+		// 移除已处理的部分
+		mm.streamProcessor.Buffer = mm.streamProcessor.Buffer[mm.streamProcessor.ChunkSize:]
+		
+		// 处理块
+		if err := processFunc(chunk); err != nil {
+			return err
+		}
+		
+		mm.streamProcessor.TotalProcessed += int64(len(chunk))
+	}
+	
+	return nil
+}
+
+// 刷新缓冲区
+func (mm *MemoryManager) FlushBuffer() error {
+	mm.streamProcessor.mutex.Lock()
+	defer mm.streamProcessor.mutex.Unlock()
+	
+	if len(mm.streamProcessor.Buffer) > 0 {
+		// 处理剩余数据
+		if err := mm.streamProcessor.ProcessFunc(mm.streamProcessor.Buffer); err != nil {
+			return err
+		}
+		
+		mm.streamProcessor.TotalProcessed += int64(len(mm.streamProcessor.Buffer))
+		mm.streamProcessor.Buffer = mm.streamProcessor.Buffer[:0] // 清空缓冲区
+	}
+	
+	return nil
+}
+
+// 创建内存池
+func NewMemoryPool(chunkSize, maxChunks int) *MemoryPool {
+	mp := &MemoryPool{
+		chunkSize:  chunkSize,
+		maxChunks:  maxChunks,
+		allocations: make(map[uintptr]int64),
+	}
+	
+	// 初始化池
+	mp.pool = sync.Pool{
+		New: func() interface{} {
+			return make([]byte, chunkSize)
+		},
+	}
+	
+	return mp
+}
+
+// 从池中获取内存块
+func (mp *MemoryPool) Get() []byte {
+	mp.mutex.Lock()
+	defer mp.mutex.Unlock()
+	
+	if mp.currentChunks >= mp.maxChunks {
+		return nil // 池已满
+	}
+	
+	chunk := mp.pool.Get().([]byte)
+	mp.currentChunks++
+	return chunk
+}
+
+// 将内存块返回到池中
+func (mp *MemoryPool) Put(chunk []byte) {
+	mp.mutex.Lock()
+	defer mp.mutex.Unlock()
+	
+	if mp.currentChunks > 0 {
+		mp.pool.Put(chunk)
+		mp.currentChunks--
+	}
+}
+
+// 创建内存分配器
+func NewMemoryAllocator(pool *MemoryPool) *MemoryAllocator {
+	return &MemoryAllocator{
+		pool:        pool,
+		allocations: make(map[uintptr]int64),
+	}
+}
+
+// 分配内存
+func (ma *MemoryAllocator) Allocate(size int64) []byte {
+	ma.mutex.Lock()
+	defer ma.mutex.Unlock()
+	
+	// 尝试从池中获取
+	if size <= int64(ma.pool.chunkSize) {
+		chunk := ma.pool.Get()
+		if chunk != nil {
+			ptr := uintptr(unsafe.Pointer(&chunk[0]))
+			ma.allocations[ptr] = size
+			ma.totalAllocated += size
+			return chunk[:size]
+		}
+	}
+	
+	// 池中无法获取，直接分配
+	chunk := make([]byte, size)
+	ptr := uintptr(unsafe.Pointer(&chunk[0]))
+	ma.allocations[ptr] = size
+	ma.totalAllocated += size
+	
+	return chunk
+}
+
+// 释放内存
+func (ma *MemoryAllocator) Free(chunk []byte) {
+	ma.mutex.Lock()
+	defer ma.mutex.Unlock()
+	
+	ptr := uintptr(unsafe.Pointer(&chunk[0]))
+	if size, exists := ma.allocations[ptr]; exists {
+		delete(ma.allocations, ptr)
+		ma.totalAllocated -= size
+		
+		// 尝试返回到池中
+		ma.pool.Put(chunk)
+	}
+}
+
+// 获取分配统计
+func (ma *MemoryAllocator) GetStats() map[string]int64 {
+	ma.mutex.RLock()
+	defer ma.mutex.RUnlock()
+	
+	return map[string]int64{
+		"total_allocated": ma.totalAllocated,
+		"active_allocations": int64(len(ma.allocations)),
+	}
+}
+
+// 内存管理命令处理函数
+
+// 显示内存统计信息
+func handleMemoryStats() {
+	fmt.Println("🧠 内存统计信息:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	
 	// 加载配置
@@ -5982,41 +6429,144 @@ func handlePerformanceStats() {
 		os.Exit(1)
 	}
 	
-	// 获取缓存统计
-	cacheStats := cacheManager.GetStats()
+	stats := memoryManager.GetStats()
+	fmt.Printf("当前内存使用: %.2f MB\n", float64(stats.CurrentUsage)/(1024*1024))
+	fmt.Printf("峰值内存使用: %.2f MB\n", float64(stats.PeakUsage)/(1024*1024))
+	fmt.Printf("堆大小: %.2f MB\n", float64(stats.HeapSize)/(1024*1024))
+	fmt.Printf("栈大小: %.2f MB\n", float64(stats.StackSize)/(1024*1024))
+	fmt.Printf("垃圾回收次数: %d\n", stats.GCCount)
+	fmt.Printf("垃圾回收时间: %v\n", time.Duration(stats.GCTime))
+	fmt.Printf("分配次数: %d\n", stats.AllocCount)
+	fmt.Printf("释放次数: %d\n", stats.FreeCount)
+	fmt.Printf("上次垃圾回收: %v\n", stats.LastGC.Format("2006-01-02 15:04:05"))
+	fmt.Printf("内存压力: %.2f%%\n", stats.MemoryPressure*100)
 	
-	// 获取工作池统计
-	workerStats := workerPool.GetStats()
+	// 显示配置信息
+	fmt.Println("\n内存配置:")
+	fmt.Printf("  最大内存使用: %.2f MB\n", float64(globalConfig.Memory.MaxMemoryUsage)/(1024*1024))
+	fmt.Printf("  GC阈值: %.2f MB\n", float64(globalConfig.Memory.GCThreshold)/(1024*1024))
+	fmt.Printf("  流式缓冲区大小: %d\n", globalConfig.Memory.StreamBufferSize)
+	fmt.Printf("  分块大小: %d\n", globalConfig.Memory.ChunkSize)
+	fmt.Printf("  内存检查间隔: %v\n", globalConfig.Memory.MemoryCheckInterval)
+	fmt.Printf("  自动GC: %t\n", globalConfig.Memory.AutoGC)
+	fmt.Printf("  内存限制: %.2f MB\n", float64(globalConfig.Memory.MemoryLimit)/(1024*1024))
+	fmt.Printf("  启用状态: %t\n", globalConfig.Memory.Enabled)
+}
+
+// 测试内存管理功能
+func handleMemoryTest() {
+	fmt.Println("🧪 测试内存管理功能...")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	
-	// 计算内存使用
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
 	
-	fmt.Println("处理统计:")
-	fmt.Printf("  总处理行数: %d\n", workerStats.TotalLines)
-	fmt.Printf("  完成任务数: %d\n", workerStats.CompletedJobs)
-	fmt.Printf("  失败任务数: %d\n", workerStats.FailedJobs)
-	fmt.Printf("  错误率: %.2f%%\n", workerStats.ErrorRate)
+	// 测试内存分配
+	fmt.Println("1. 测试内存分配...")
+	ptr1 := memoryManager.Allocate(1024 * 1024) // 1MB
+	if ptr1 != 0 {
+		fmt.Println("   ✅ 1MB内存分配成功")
+	} else {
+		fmt.Println("   ❌ 1MB内存分配失败")
+	}
 	
-	fmt.Println("\n性能指标:")
-	fmt.Printf("  吞吐量: %.2f 行/秒\n", workerStats.Throughput)
-	fmt.Printf("  平均处理时间: %v\n", workerStats.AverageTime)
-	fmt.Printf("  活跃工作协程: %d\n", workerStats.ActiveWorkers)
+	ptr2 := memoryManager.Allocate(2 * 1024 * 1024) // 2MB
+	if ptr2 != 0 {
+		fmt.Println("   ✅ 2MB内存分配成功")
+	} else {
+		fmt.Println("   ❌ 2MB内存分配失败")
+	}
 	
-	fmt.Println("\n缓存统计:")
-	fmt.Printf("  缓存命中次数: %d\n", cacheStats.HitCount)
-	fmt.Printf("  缓存未命中次数: %d\n", cacheStats.MissCount)
-	fmt.Printf("  缓存命中率: %.2f%%\n", cacheStats.HitRate)
-	fmt.Printf("  总缓存项数: %d\n", cacheStats.TotalItems)
+	// 测试流式处理
+	fmt.Println("2. 测试流式处理...")
+	testLines := []string{
+		"2024-01-01 10:00:00 [INFO] Test log line 1",
+		"2024-01-01 10:00:01 [ERROR] Test log line 2",
+		"2024-01-01 10:00:02 [WARN] Test log line 3",
+	}
 	
-	fmt.Println("\n内存使用:")
-	fmt.Printf("  当前内存使用: %.2f MB\n", float64(m.Alloc)/(1024*1024))
-	fmt.Printf("  系统内存使用: %.2f MB\n", float64(m.Sys)/(1024*1024))
-	fmt.Printf("  垃圾回收次数: %d\n", m.NumGC)
-	fmt.Printf("  垃圾回收时间: %v\n", time.Duration(m.PauseTotalNs))
+	processFunc := func(lines []string) error {
+		fmt.Printf("   📝 处理了 %d 行日志\n", len(lines))
+		return nil
+	}
 	
-	fmt.Println("\n系统信息:")
-	fmt.Printf("  Go版本: %s\n", runtime.Version())
-	fmt.Printf("  CPU核心数: %d\n", runtime.NumCPU())
-	fmt.Printf("  Goroutine数: %d\n", runtime.NumGoroutine())
+	if err := memoryManager.ProcessStream(testLines, processFunc); err != nil {
+		fmt.Printf("   ❌ 流式处理失败: %v\n", err)
+	} else {
+		fmt.Println("   ✅ 流式处理成功")
+	}
+	
+	// 测试内存池
+	fmt.Println("3. 测试内存池...")
+	pool := NewMemoryPool(1024, 10)
+	chunk1 := pool.Get()
+	if chunk1 != nil {
+		fmt.Println("   ✅ 从内存池获取内存块成功")
+		pool.Put(chunk1)
+		fmt.Println("   ✅ 将内存块返回到池中成功")
+	} else {
+		fmt.Println("   ❌ 从内存池获取内存块失败")
+	}
+	
+	// 测试内存分配器
+	fmt.Println("4. 测试内存分配器...")
+	allocator := NewMemoryAllocator(pool)
+	chunk2 := allocator.Allocate(512)
+	if chunk2 != nil {
+		fmt.Println("   ✅ 内存分配器分配成功")
+		allocator.Free(chunk2)
+		fmt.Println("   ✅ 内存分配器释放成功")
+	} else {
+		fmt.Println("   ❌ 内存分配器分配失败")
+	}
+	
+	// 释放测试内存
+	if ptr1 != 0 {
+		memoryManager.Free(ptr1)
+	}
+	if ptr2 != 0 {
+		memoryManager.Free(ptr2)
+	}
+	
+	// 显示最终统计
+	fmt.Println("\n最终内存统计:")
+	stats := memoryManager.GetStats()
+	fmt.Printf("  当前内存使用: %.2f MB\n", float64(stats.CurrentUsage)/(1024*1024))
+	fmt.Printf("  分配次数: %d\n", stats.AllocCount)
+	fmt.Printf("  释放次数: %d\n", stats.FreeCount)
+	fmt.Printf("  内存压力: %.2f%%\n", stats.MemoryPressure*100)
+	
+	fmt.Println("\n✅ 内存管理功能测试完成")
+}
+
+// 强制垃圾回收
+func handleMemoryGC() {
+	fmt.Println("🗑️  强制垃圾回收...")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 获取回收前统计
+	statsBefore := memoryManager.GetStats()
+	fmt.Printf("回收前内存使用: %.2f MB\n", float64(statsBefore.CurrentUsage)/(1024*1024))
+	
+	// 强制垃圾回收
+	start := time.Now()
+	runtime.GC()
+	runtime.GC() // 执行两次确保完全回收
+	elapsed := time.Since(start)
+	
+	// 获取回收后统计
+	statsAfter := memoryManager.GetStats()
+	fmt.Printf("回收后内存使用: %.2f MB\n", float64(statsAfter.CurrentUsage)/(1024*1024))
+	fmt.Printf("回收时间: %v\n", elapsed)
+	fmt.Printf("释放内存: %.2f MB\n", float64(statsBefore.CurrentUsage-statsAfter.CurrentUsage)/(1024*1024))
+	
+	fmt.Println("✅ 垃圾回收完成")
 }
