@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
-	"time"
+	"path/filepath"
+	"strings"
 )
 
 // 邮件配置
@@ -48,15 +50,15 @@ type OutputFormat struct {
 
 // 日志级别配置
 type LogLevelConfig struct {
-	Level      string `json:"level"`       // debug, info, warn, error, fatal
-	ShowDebug  bool   `json:"show_debug"`  // 显示调试日志
-	ShowInfo   bool   `json:"show_info"`   // 显示信息日志
-	ShowWarn   bool   `json:"show_warn"`   // 显示警告日志
-	ShowError  bool   `json:"show_error"`  // 显示错误日志
-	ShowFatal  bool   `json:"show_fatal"`  // 显示致命日志
-	MinLevel   string `json:"min_level"`   // 最小日志级别
-	MaxLevel   string `json:"max_level"`   // 最大日志级别
-	Enabled    bool   `json:"enabled"`     // 是否启用日志级别过滤
+	Level     string `json:"level"`      // debug, info, warn, error, fatal
+	ShowDebug bool   `json:"show_debug"` // 显示调试日志
+	ShowInfo  bool   `json:"show_info"`  // 显示信息日志
+	ShowWarn  bool   `json:"show_warn"`  // 显示警告日志
+	ShowError bool   `json:"show_error"` // 显示错误日志
+	ShowFatal bool   `json:"show_fatal"` // 显示致命日志
+	MinLevel  string `json:"min_level"`  // 最小日志级别
+	MaxLevel  string `json:"max_level"`  // 最大日志级别
+	Enabled   bool   `json:"enabled"`    // 是否启用日志级别过滤
 }
 
 // 配置文件结构
@@ -180,4 +182,164 @@ func handleConfigTemplate() {
 	fmt.Println("1. 将上述配置保存到 ~/.config/aipipe.json")
 	fmt.Println("2. 修改 AIEndpoint、Token 和 Model 为你的实际值")
 	fmt.Println("3. 使用 --config-init 启动交互式配置向导")
+}
+
+// 配置验证错误
+type ConfigValidationError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+	Value   string `json:"value"`
+}
+
+func (e *ConfigValidationError) Error() string {
+	return fmt.Sprintf("配置验证失败 [%s]: %s (当前值: %s)", e.Field, e.Message, e.Value)
+}
+
+// 配置验证器
+type ConfigValidator struct {
+	errors []ConfigValidationError
+}
+
+func NewConfigValidator() *ConfigValidator {
+	return &ConfigValidator{
+		errors: make([]ConfigValidationError, 0),
+	}
+}
+
+func (cv *ConfigValidator) Validate(config *Config) error {
+	cv.errors = cv.errors[:0] // 清空之前的错误
+
+	// 验证必填字段
+	cv.validateRequired("ai_endpoint", config.AIEndpoint)
+	cv.validateRequired("token", config.Token)
+	cv.validateRequired("model", config.Model)
+
+	// 验证 URL 格式
+	cv.validateURL("ai_endpoint", config.AIEndpoint)
+
+	// 验证数值范围
+	cv.validateRange("max_retries", config.MaxRetries, 0, 10)
+	cv.validateRange("timeout", config.Timeout, 5, 300)
+	cv.validateRange("rate_limit", config.RateLimit, 1, 1000)
+
+	// 验证 Token 长度
+	cv.validateMinLength("token", config.Token, 10)
+
+	if len(cv.errors) > 0 {
+		return fmt.Errorf("配置验证失败，发现 %d 个错误", len(cv.errors))
+	}
+
+	return nil
+}
+
+func (cv *ConfigValidator) validateRequired(field, value string) {
+	if strings.TrimSpace(value) == "" {
+		cv.errors = append(cv.errors, ConfigValidationError{
+			Field:   field,
+			Message: "此字段为必填项",
+			Value:   value,
+		})
+	}
+}
+
+func (cv *ConfigValidator) validateURL(field, value string) {
+	if value == "" {
+		return
+	}
+
+	if !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
+		cv.errors = append(cv.errors, ConfigValidationError{
+			Field:   field,
+			Message: "必须是有效的 URL 格式",
+			Value:   value,
+		})
+	}
+}
+
+func (cv *ConfigValidator) validateRange(field string, value, min, max int) {
+	if value < min || value > max {
+		cv.errors = append(cv.errors, ConfigValidationError{
+			Field:   field,
+			Message: fmt.Sprintf("值必须在 %d 到 %d 之间", min, max),
+			Value:   fmt.Sprintf("%d", value),
+		})
+	}
+}
+
+func (cv *ConfigValidator) validateMinLength(field, value string, minLen int) {
+	if len(value) < minLen {
+		cv.errors = append(cv.errors, ConfigValidationError{
+			Field:   field,
+			Message: fmt.Sprintf("长度至少为 %d 个字符", minLen),
+			Value:   fmt.Sprintf("%d", len(value)),
+		})
+	}
+}
+
+func (cv *ConfigValidator) GetErrors() []ConfigValidationError {
+	return cv.errors
+}
+
+// 处理配置测试
+func handleConfigTest() {
+	fmt.Println("🧪 测试配置文件...")
+
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	// 测试 AI 服务连接
+	fmt.Println("🔗 测试 AI 服务连接...")
+	if err := testAIConnection(); err != nil {
+		fmt.Printf("❌ AI 服务连接失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("✅ 配置文件测试通过！")
+}
+
+// 验证配置文件
+func handleConfigValidate() {
+	fmt.Println("🔍 验证配置文件...")
+
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置验证失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("✅ 配置文件验证通过！")
+}
+
+// 查找多源配置文件
+func findMultiSourceConfig() (string, error) {
+	configDir := filepath.Join(os.Getenv("HOME"), ".config")
+
+	// 按优先级顺序检查多源配置文件
+	configFiles := []string{
+		"aipipe-sources.json",
+		"aipipe-sources.yaml",
+		"aipipe-sources.yml",
+		"aipipe-sources.toml",
+		"aipipe-multi.json",
+		"aipipe-multi.yaml",
+		"aipipe-multi.yml",
+		"aipipe-multi.toml",
+	}
+
+	for _, filename := range configFiles {
+		configPath := filepath.Join(configDir, filename)
+		if _, err := os.Stat(configPath); err == nil {
+			if *verbose {
+				log.Printf("🔍 找到多源配置文件: %s", configPath)
+			}
+			return configPath, nil
+		}
+	}
+
+	// 没有找到任何配置文件，返回默认路径
+	defaultPath := filepath.Join(configDir, "aipipe-sources.json")
+	return defaultPath, nil
 }
