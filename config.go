@@ -375,41 +375,156 @@ func handleConfigShow() {
 }
 
 // 默认配置变量
-var defaultConfig = getDefaultConfig()
+var defaultConfig Config
+
+// 初始化默认配置
+func init() {
+	defaultConfig = Config{
+		AIEndpoint:   "https://your-ai-server.com/api/v1/chat/completions",
+		Token:        "your-api-token-here",
+		Model:        "gpt-4",
+		CustomPrompt: "",
+		MaxRetries:   3,
+		Timeout:      30,
+		RateLimit:    100,
+		LocalFilter:  true,
+		Notifiers: NotifierConfig{
+			Email: EmailConfig{
+				Enabled:   false,
+				Provider:  "smtp",
+				Host:      "smtp.gmail.com",
+				Port:      587,
+				Username:  "",
+				Password:  "",
+				FromEmail: "",
+				ToEmails:  []string{},
+			},
+			DingTalk: WebhookConfig{
+				Enabled: false,
+				URL:     "",
+			},
+			WeChat: WebhookConfig{
+				Enabled: false,
+				URL:     "",
+			},
+			Feishu: WebhookConfig{
+				Enabled: false,
+				URL:     "",
+			},
+			Slack: WebhookConfig{
+				Enabled: false,
+				URL:     "",
+			},
+			CustomWebhooks: []WebhookConfig{},
+		},
+		Cache: CacheConfig{
+			MaxSize:         100 * 1024 * 1024, // 100MB
+			MaxItems:        1000,
+			DefaultTTL:      1 * time.Hour,
+			AITTL:           24 * time.Hour,
+			RuleTTL:         1 * time.Hour,
+			ConfigTTL:       30 * time.Minute,
+			CleanupInterval: 5 * time.Minute,
+			Enabled:         true,
+		},
+		WorkerPool: WorkerPoolConfig{
+			MaxWorkers:   4,
+			QueueSize:    100,
+			BatchSize:    10,
+			Timeout:      30 * time.Second,
+			RetryCount:   3,
+			BackoffDelay: 1 * time.Second,
+			Enabled:      true,
+		},
+		Memory: MemoryConfig{
+			MaxMemoryUsage:      512 * 1024 * 1024, // 512MB
+			GCThreshold:         256 * 1024 * 1024, // 256MB
+			StreamBufferSize:    1000,
+			ChunkSize:           100,
+			MemoryCheckInterval: 5 * time.Second,
+			AutoGC:              true,
+			MemoryLimit:         1024 * 1024 * 1024, // 1GB
+			Enabled:             true,
+		},
+		Concurrency: ConcurrencyConfig{
+			MaxConcurrency:        100,
+			BackpressureThreshold: 80,
+			LoadBalanceStrategy:   "round_robin",
+			AdaptiveScaling:       true,
+			ScaleUpThreshold:      0.8,
+			ScaleDownThreshold:    0.3,
+			MinWorkers:            2,
+			MaxWorkers:            20,
+			ScalingInterval:       30 * time.Second,
+			Enabled:               true,
+		},
+		IO: IOConfig{
+			BufferSize:       64 * 1024, // 64KB
+			BatchSize:        1000,
+			FlushInterval:    5 * time.Second,
+			AsyncIO:          true,
+			ReadAhead:        32 * 1024, // 32KB
+			WriteBehind:      true,
+			Compression:      false,
+			CompressionLevel: 6,
+			CacheSize:        10 * 1024 * 1024, // 10MB
+			Enabled:          true,
+		},
+		OutputFormat: OutputFormat{
+			Type:     "table",
+			Template: "",
+			Color:    true,
+			Filter:   "",
+			Width:    120,
+			Headers:  true,
+		},
+		LogLevel: LogLevelConfig{
+			Level:     "info",
+			ShowDebug: false,
+			ShowInfo:  true,
+			ShowWarn:  true,
+			ShowError: true,
+			ShowFatal: true,
+			MinLevel:  "info",
+			MaxLevel:  "fatal",
+			Enabled:   true,
+		},
+	}
+}
 
 // 简化版 loadConfig 函数
 func loadConfig() error {
 	configPath := filepath.Join(os.Getenv("HOME"), ".config", "aipipe.json")
-	
+
 	// 检查配置文件是否存在
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		// 配置文件不存在，使用默认配置
 		globalConfig = defaultConfig
 		return nil
 	}
-	
+
 	// 读取配置文件
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("读取配置文件失败: %v", err)
 	}
-	
+
 	// 解析JSON配置
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		return fmt.Errorf("解析配置文件失败: %v", err)
 	}
-	
+
 	// 合并默认配置
 	globalConfig = mergeConfig(defaultConfig, config)
-	
+
 	return nil
 }
 
 // 合并配置
 func mergeConfig(defaultConfig, userConfig Config) Config {
 	merged := defaultConfig
-	
+
 	// 合并基本配置
 	if userConfig.AIEndpoint != "" {
 		merged.AIEndpoint = userConfig.AIEndpoint
@@ -423,7 +538,7 @@ func mergeConfig(defaultConfig, userConfig Config) Config {
 	if userConfig.CustomPrompt != "" {
 		merged.CustomPrompt = userConfig.CustomPrompt
 	}
-	
+
 	// 合并其他配置项
 	if userConfig.MaxRetries > 0 {
 		merged.MaxRetries = userConfig.MaxRetries
@@ -435,7 +550,7 @@ func mergeConfig(defaultConfig, userConfig Config) Config {
 		merged.RateLimit = userConfig.RateLimit
 	}
 	merged.LocalFilter = userConfig.LocalFilter
-	
+
 	// 合并AI服务列表
 	if len(userConfig.AIServices) > 0 {
 		merged.AIServices = userConfig.AIServices
@@ -443,12 +558,12 @@ func mergeConfig(defaultConfig, userConfig Config) Config {
 	if userConfig.DefaultAI != "" {
 		merged.DefaultAI = userConfig.DefaultAI
 	}
-	
+
 	// 合并规则列表
 	if len(userConfig.Rules) > 0 {
 		merged.Rules = userConfig.Rules
 	}
-	
+
 	// 合并其他子配置
 	merged.Cache = userConfig.Cache
 	merged.WorkerPool = userConfig.WorkerPool
@@ -457,7 +572,7 @@ func mergeConfig(defaultConfig, userConfig Config) Config {
 	merged.IO = userConfig.IO
 	merged.OutputFormat = userConfig.OutputFormat
 	merged.LogLevel = userConfig.LogLevel
-	
+
 	return merged
 }
 
@@ -467,19 +582,19 @@ func loadMultiSourceConfig(configPath string) (*MultiSourceConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("读取配置文件失败: %v", err)
 	}
-	
+
 	var config MultiSourceConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("解析配置文件失败: %v", err)
 	}
-	
+
 	return &config, nil
 }
 
 // 查找默认配置文件
 func findDefaultConfig() (string, error) {
 	configDir := filepath.Join(os.Getenv("HOME"), ".config")
-	
+
 	// 按优先级顺序检查配置文件
 	configFiles := []string{
 		"aipipe.json",
@@ -487,7 +602,7 @@ func findDefaultConfig() (string, error) {
 		"aipipe.yml",
 		"aipipe.toml",
 	}
-	
+
 	for _, filename := range configFiles {
 		configPath := filepath.Join(configDir, filename)
 		if _, err := os.Stat(configPath); err == nil {
@@ -497,7 +612,7 @@ func findDefaultConfig() (string, error) {
 			return configPath, nil
 		}
 	}
-	
+
 	// 没有找到，返回默认路径
 	return filepath.Join(configDir, "aipipe.json"), nil
 }
