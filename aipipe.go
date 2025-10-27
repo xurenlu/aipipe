@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -8083,34 +8084,199 @@ type InteractivePrompt struct {
 	validator func(string) error
 }
 
-// 配置验证器
-type ConfigValidator struct {
-	rules    []ValidationRule
-	errors   []ValidationError
-	warnings []ValidationWarning
+// 配置向导实现
+
+// 创建新的配置向导
+func NewConfigWizard() *ConfigWizard {
+	wizard := &ConfigWizard{
+		steps:       make([]WizardStep, 0),
+		currentStep: 0,
+		config:      defaultConfig,
+		responses:   make(map[string]interface{}),
+	}
+	
+	// 初始化向导步骤
+	wizard.initSteps()
+	
+	return wizard
 }
 
-// 验证规则
-type ValidationRule struct {
-	Field    string
-	Required bool
-	Type     string
-	Min      interface{}
-	Max      interface{}
-	Pattern  string
-	Custom   func(interface{}) error
+// 初始化向导步骤
+func (w *ConfigWizard) initSteps() {
+	w.steps = []WizardStep{
+		{
+			ID:          "ai_endpoint",
+			Title:       "AI服务端点配置",
+			Description: "请输入AI服务的API端点URL",
+			Type:        "input",
+			Required:    true,
+			Default:     "https://your-ai-server.com/api/v1/chat/completions",
+			Validation:  validateURL,
+		},
+		{
+			ID:          "ai_token",
+			Title:       "API Token配置",
+			Description: "请输入AI服务的API Token",
+			Type:        "input",
+			Required:    true,
+			Default:     "your-api-token-here",
+			Validation:  validateToken,
+		},
+		{
+			ID:          "ai_model",
+			Title:       "AI模型选择",
+			Description: "请选择要使用的AI模型",
+			Type:        "select",
+			Required:    true,
+			Default:     "gpt-4",
+			Options: []WizardOption{
+				{Value: "gpt-4", Label: "GPT-4", Description: "OpenAI GPT-4模型"},
+				{Value: "gpt-3.5-turbo", Label: "GPT-3.5 Turbo", Description: "OpenAI GPT-3.5 Turbo模型"},
+				{Value: "claude-3", Label: "Claude 3", Description: "Anthropic Claude 3模型"},
+				{Value: "gemini-pro", Label: "Gemini Pro", Description: "Google Gemini Pro模型"},
+			},
+		},
+		{
+			ID:          "output_format",
+			Title:       "输出格式选择",
+			Description: "请选择日志输出格式",
+			Type:        "select",
+			Required:    true,
+			Default:     "table",
+			Options: []WizardOption{
+				{Value: "table", Label: "表格格式", Description: "易读的表格格式"},
+				{Value: "json", Label: "JSON格式", Description: "机器可读的JSON格式"},
+				{Value: "csv", Label: "CSV格式", Description: "逗号分隔值格式"},
+				{Value: "custom", Label: "自定义格式", Description: "使用自定义模板"},
+			},
+		},
+		{
+			ID:          "log_level",
+			Title:       "日志级别配置",
+			Description: "请选择要监控的日志级别",
+			Type:        "select",
+			Required:    true,
+			Default:     "info",
+			Options: []WizardOption{
+				{Value: "debug", Label: "DEBUG", Description: "显示所有日志级别"},
+				{Value: "info", Label: "INFO", Description: "显示信息级别及以上"},
+				{Value: "warn", Label: "WARN", Description: "显示警告级别及以上"},
+				{Value: "error", Label: "ERROR", Description: "只显示错误级别"},
+				{Value: "fatal", Label: "FATAL", Description: "只显示致命错误"},
+			},
+		},
+		{
+			ID:          "enable_features",
+			Title:       "功能启用配置",
+			Description: "请选择要启用的功能",
+			Type:        "select",
+			Required:    false,
+			Default:     "basic",
+			Options: []WizardOption{
+				{Value: "basic", Label: "基础功能", Description: "只启用基本日志分析功能"},
+				{Value: "advanced", Label: "高级功能", Description: "启用所有高级功能"},
+				{Value: "enterprise", Label: "企业功能", Description: "启用企业级功能"},
+			},
+		},
+		{
+			ID:          "confirm_config",
+			Title:       "配置确认",
+			Description: "请确认配置是否正确",
+			Type:        "confirm",
+			Required:    true,
+			Default:     true,
+		},
+	}
 }
 
-// 验证错误
-type ValidationError struct {
-	Field   string
-	Message string
-	Value   interface{}
+// 验证URL函数
+func validateURL(value interface{}) error {
+	url, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("URL必须是字符串")
+	}
+	
+	if url == "" {
+		return fmt.Errorf("URL不能为空")
+	}
+	
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		return fmt.Errorf("URL必须以http://或https://开头")
+	}
+	
+	return nil
 }
 
-// 验证警告
-type ValidationWarning struct {
-	Field   string
-	Message string
-	Value   interface{}
+// 验证Token函数
+func validateToken(value interface{}) error {
+	token, ok := value.(string)
+	if !ok {
+		return fmt.Errorf("Token必须是字符串")
+	}
+	
+	if token == "" {
+		return fmt.Errorf("Token不能为空")
+	}
+	
+	if len(token) < 10 {
+		return fmt.Errorf("Token长度至少10个字符")
+	}
+	
+	return nil
+}
+
+// 处理配置向导
+func handleConfigInit() {
+	fmt.Println("🎯 启动配置向导...")
+	wizard := NewConfigWizard()
+	if err := wizard.Start(); err != nil {
+		fmt.Printf("❌ 配置向导失败: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// 处理配置模板
+func handleConfigTemplate() {
+	fmt.Println("📋 配置模板:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 显示示例配置
+	template := Config{
+		AIEndpoint:   "https://your-ai-server.com/api/v1/chat/completions",
+		Token:        "your-api-token-here",
+		Model:        "gpt-4",
+		CustomPrompt: "你的自定义提示词",
+		MaxRetries:   3,
+		Timeout:      30,
+		RateLimit:    100,
+		LocalFilter:  true,
+		OutputFormat: OutputFormat{
+			Type:     "table",
+			Color:    true,
+			Width:    120,
+			Headers:  true,
+		},
+		LogLevel: LogLevelConfig{
+			Level:     "info",
+			ShowInfo:  true,
+			ShowWarn:  true,
+			ShowError: true,
+			ShowFatal: true,
+			MinLevel:  "info",
+			MaxLevel:  "fatal",
+			Enabled:   true,
+		},
+	}
+	
+	data, err := json.MarshalIndent(template, "", "  ")
+	if err != nil {
+		fmt.Printf("❌ 生成模板失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	fmt.Println(string(data))
+	fmt.Println("\n💡 提示:")
+	fmt.Println("1. 将上述配置保存到 ~/.config/aipipe.json")
+	fmt.Println("2. 修改 AIEndpoint、Token 和 Model 为你的实际值")
+	fmt.Println("3. 使用 --config-init 启动交互式配置向导")
 }
