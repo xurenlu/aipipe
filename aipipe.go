@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -3479,6 +3481,293 @@ func (w *ConfigWizard) initSteps() {
 			Default:     true,
 		},
 	}
+}
+
+// 启动配置向导
+func (w *ConfigWizard) Start() error {
+	fmt.Println("🎯 AIPipe 配置向导")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("欢迎使用AIPipe配置向导！")
+	fmt.Println("我们将引导您完成基本配置。")
+	fmt.Println()
+	
+	for w.currentStep < len(w.steps) {
+		step := w.steps[w.currentStep]
+		
+		fmt.Printf("步骤 %d/%d: %s\n", w.currentStep+1, len(w.steps), step.Title)
+		fmt.Printf("描述: %s\n", step.Description)
+		fmt.Println()
+		
+		response, err := w.promptStep(step)
+		if err != nil {
+			return fmt.Errorf("步骤 %d 输入错误: %v", w.currentStep+1, err)
+		}
+		
+		// 验证输入
+		if step.Validation != nil {
+			if err := step.Validation(response); err != nil {
+				fmt.Printf("❌ 验证失败: %v\n", err)
+				fmt.Println("请重新输入。")
+				continue
+			}
+		}
+		
+		// 保存响应
+		w.responses[step.ID] = response
+		
+		// 更新配置
+		w.updateConfig(step.ID, response)
+		
+		fmt.Println("✅ 配置已保存")
+		fmt.Println()
+		
+		w.currentStep++
+	}
+	
+	// 保存配置文件
+	if err := w.saveConfig(); err != nil {
+		return fmt.Errorf("保存配置文件失败: %v", err)
+	}
+	
+	fmt.Println("🎉 配置向导完成！")
+	fmt.Println("配置文件已保存到 ~/.config/aipipe.json")
+	fmt.Println("您现在可以使用 AIPipe 了！")
+	
+	return nil
+}
+
+// 提示用户输入
+func (w *ConfigWizard) promptStep(step WizardStep) (interface{}, error) {
+	switch step.Type {
+	case "input":
+		return w.promptInput(step)
+	case "select":
+		return w.promptSelect(step)
+	case "confirm":
+		return w.promptConfirm(step)
+	case "file":
+		return w.promptFile(step)
+	default:
+		return nil, fmt.Errorf("不支持的步骤类型: %s", step.Type)
+	}
+}
+
+// 输入提示
+func (w *ConfigWizard) promptInput(step WizardStep) (string, error) {
+	prompt := fmt.Sprintf("请输入 %s", step.Title)
+	if step.Default != nil {
+		prompt += fmt.Sprintf(" (默认: %v)", step.Default)
+	}
+	prompt += ": "
+	
+	fmt.Print(prompt)
+	
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	
+	input = strings.TrimSpace(input)
+	if input == "" && step.Default != nil {
+		return step.Default.(string), nil
+	}
+	
+	return input, nil
+}
+
+// 选择提示
+func (w *ConfigWizard) promptSelect(step WizardStep) (string, error) {
+	fmt.Println("请选择:")
+	for i, option := range step.Options {
+		fmt.Printf("  %d. %s - %s\n", i+1, option.Label, option.Description)
+	}
+	
+	prompt := "请输入选项编号"
+	if step.Default != nil {
+		prompt += fmt.Sprintf(" (默认: %v)", step.Default)
+	}
+	prompt += ": "
+	
+	fmt.Print(prompt)
+	
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	
+	input = strings.TrimSpace(input)
+	if input == "" && step.Default != nil {
+		return step.Default.(string), nil
+	}
+	
+	// 解析选择
+	choice, err := strconv.Atoi(input)
+	if err != nil || choice < 1 || choice > len(step.Options) {
+		return "", fmt.Errorf("无效的选择: %s", input)
+	}
+	
+	return step.Options[choice-1].Value, nil
+}
+
+// 确认提示
+func (w *ConfigWizard) promptConfirm(step WizardStep) (bool, error) {
+	prompt := "是否确认"
+	if step.Default != nil {
+		prompt += fmt.Sprintf(" (默认: %v)", step.Default)
+	}
+	prompt += " [y/N]: "
+	
+	fmt.Print(prompt)
+	
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input == "" && step.Default != nil {
+		return step.Default.(bool), nil
+	}
+	
+	return input == "y" || input == "yes", nil
+}
+
+// 文件提示
+func (w *ConfigWizard) promptFile(step WizardStep) (string, error) {
+	prompt := fmt.Sprintf("请输入文件路径")
+	if step.Default != nil {
+		prompt += fmt.Sprintf(" (默认: %v)", step.Default)
+	}
+	prompt += ": "
+	
+	fmt.Print(prompt)
+	
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	
+	input = strings.TrimSpace(input)
+	if input == "" && step.Default != nil {
+		return step.Default.(string), nil
+	}
+	
+	// 验证文件是否存在
+	if _, err := os.Stat(input); os.IsNotExist(err) {
+		return "", fmt.Errorf("文件不存在: %s", input)
+	}
+	
+	return input, nil
+}
+
+// 更新配置
+func (w *ConfigWizard) updateConfig(stepID string, response interface{}) {
+	switch stepID {
+	case "ai_endpoint":
+		w.config.AIEndpoint = response.(string)
+	case "ai_token":
+		w.config.Token = response.(string)
+	case "ai_model":
+		w.config.Model = response.(string)
+	case "output_format":
+		w.config.OutputFormat.Type = response.(string)
+	case "log_level":
+		w.config.LogLevel.Level = response.(string)
+		w.updateLogLevelConfig(response.(string))
+	case "enable_features":
+		w.updateFeatureConfig(response.(string))
+	}
+}
+
+// 更新日志级别配置
+func (w *ConfigWizard) updateLogLevelConfig(level string) {
+	switch level {
+	case "debug":
+		w.config.LogLevel.ShowDebug = true
+		w.config.LogLevel.ShowInfo = true
+		w.config.LogLevel.ShowWarn = true
+		w.config.LogLevel.ShowError = true
+		w.config.LogLevel.ShowFatal = true
+		w.config.LogLevel.MinLevel = "debug"
+	case "info":
+		w.config.LogLevel.ShowDebug = false
+		w.config.LogLevel.ShowInfo = true
+		w.config.LogLevel.ShowWarn = true
+		w.config.LogLevel.ShowError = true
+		w.config.LogLevel.ShowFatal = true
+		w.config.LogLevel.MinLevel = "info"
+	case "warn":
+		w.config.LogLevel.ShowDebug = false
+		w.config.LogLevel.ShowInfo = false
+		w.config.LogLevel.ShowWarn = true
+		w.config.LogLevel.ShowError = true
+		w.config.LogLevel.ShowFatal = true
+		w.config.LogLevel.MinLevel = "warn"
+	case "error":
+		w.config.LogLevel.ShowDebug = false
+		w.config.LogLevel.ShowInfo = false
+		w.config.LogLevel.ShowWarn = false
+		w.config.LogLevel.ShowError = true
+		w.config.LogLevel.ShowFatal = true
+		w.config.LogLevel.MinLevel = "error"
+	case "fatal":
+		w.config.LogLevel.ShowDebug = false
+		w.config.LogLevel.ShowInfo = false
+		w.config.LogLevel.ShowWarn = false
+		w.config.LogLevel.ShowError = false
+		w.config.LogLevel.ShowFatal = true
+		w.config.LogLevel.MinLevel = "fatal"
+	}
+}
+
+// 更新功能配置
+func (w *ConfigWizard) updateFeatureConfig(feature string) {
+	switch feature {
+	case "basic":
+		// 基础功能：只启用基本配置
+		w.config.WorkerPool.Enabled = false
+		w.config.Memory.Enabled = false
+		w.config.Concurrency.Enabled = false
+		w.config.IO.Enabled = false
+	case "advanced":
+		// 高级功能：启用所有功能
+		w.config.WorkerPool.Enabled = true
+		w.config.Memory.Enabled = true
+		w.config.Concurrency.Enabled = true
+		w.config.IO.Enabled = true
+	case "enterprise":
+		// 企业功能：启用所有功能并优化配置
+		w.config.WorkerPool.Enabled = true
+		w.config.Memory.Enabled = true
+		w.config.Concurrency.Enabled = true
+		w.config.IO.Enabled = true
+		// 优化企业级配置
+		w.config.WorkerPool.MaxWorkers = 8
+		w.config.Memory.MaxMemoryUsage = 2 * 1024 * 1024 * 1024 // 2GB
+		w.config.Concurrency.MaxConcurrency = 200
+		w.config.IO.BufferSize = 128 * 1024 // 128KB
+	}
+}
+
+// 保存配置文件
+func (w *ConfigWizard) saveConfig() error {
+	configDir := filepath.Join(os.Getenv("HOME"), ".config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return err
+	}
+	
+	configPath := filepath.Join(configDir, "aipipe.json")
+	
+	data, err := json.MarshalIndent(w.config, "", "  ")
+	if err != nil {
+		return err
+	}
+	
+	return os.WriteFile(configPath, data, 0644)
 }
 
 // 验证URL函数
