@@ -374,6 +374,108 @@ func handleConfigShow() {
 	}
 }
 
+// 默认配置变量
+var defaultConfig = getDefaultConfig()
+
+// 简化版 loadConfig 函数
+func loadConfig() error {
+	configPath := filepath.Join(os.Getenv("HOME"), ".config", "aipipe.json")
+	
+	// 检查配置文件是否存在
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		// 配置文件不存在，使用默认配置
+		globalConfig = defaultConfig
+		return nil
+	}
+	
+	// 读取配置文件
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("读取配置文件失败: %v", err)
+	}
+	
+	// 解析JSON配置
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("解析配置文件失败: %v", err)
+	}
+	
+	// 合并默认配置
+	globalConfig = mergeConfig(defaultConfig, config)
+	
+	return nil
+}
+
+// 合并配置
+func mergeConfig(defaultConfig, userConfig Config) Config {
+	merged := defaultConfig
+	
+	// 合并基本配置
+	if userConfig.AIEndpoint != "" {
+		merged.AIEndpoint = userConfig.AIEndpoint
+	}
+	if userConfig.Token != "" {
+		merged.Token = userConfig.Token
+	}
+	if userConfig.Model != "" {
+		merged.Model = userConfig.Model
+	}
+	if userConfig.CustomPrompt != "" {
+		merged.CustomPrompt = userConfig.CustomPrompt
+	}
+	
+	// 合并其他配置项
+	if userConfig.MaxRetries > 0 {
+		merged.MaxRetries = userConfig.MaxRetries
+	}
+	if userConfig.Timeout > 0 {
+		merged.Timeout = userConfig.Timeout
+	}
+	if userConfig.RateLimit > 0 {
+		merged.RateLimit = userConfig.RateLimit
+	}
+	merged.LocalFilter = userConfig.LocalFilter
+	
+	// 合并AI服务列表
+	if len(userConfig.AIServices) > 0 {
+		merged.AIServices = userConfig.AIServices
+	}
+	if userConfig.DefaultAI != "" {
+		merged.DefaultAI = userConfig.DefaultAI
+	}
+	
+	// 合并规则列表
+	if len(userConfig.Rules) > 0 {
+		merged.Rules = userConfig.Rules
+	}
+	
+	// 合并其他子配置
+	merged.Cache = userConfig.Cache
+	merged.WorkerPool = userConfig.WorkerPool
+	merged.Memory = userConfig.Memory
+	merged.Concurrency = userConfig.Concurrency
+	merged.IO = userConfig.IO
+	merged.OutputFormat = userConfig.OutputFormat
+	merged.LogLevel = userConfig.LogLevel
+	
+	return merged
+}
+
+// 加载多源配置文件
+func loadMultiSourceConfig(configPath string) (*MultiSourceConfig, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("读取配置文件失败: %v", err)
+	}
+	
+	var config MultiSourceConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("解析配置文件失败: %v", err)
+	}
+	
+	return &config, nil
+}
+
 // 查找默认配置文件
 func findDefaultConfig() (string, error) {
 	configDir := filepath.Join(os.Getenv("HOME"), ".config")
