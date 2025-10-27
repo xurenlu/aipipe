@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -648,4 +651,81 @@ func parseConfigFile(data []byte, format string, target interface{}) error {
 	default:
 		return fmt.Errorf("不支持的配置文件格式: %s", format)
 	}
+}
+
+// 输出格式化器结构
+type OutputFormatter struct {
+	format   OutputFormat
+	template *template.Template
+	mutex    sync.RWMutex
+}
+
+// 创建输出格式化器
+func NewOutputFormatter(format OutputFormat) *OutputFormatter {
+	formatter := &OutputFormatter{
+		format: format,
+	}
+	
+	// 如果有自定义模板，解析它
+	if format.Template != "" {
+		tmpl, err := template.New("output").Parse(format.Template)
+		if err == nil {
+			formatter.template = tmpl
+		}
+	}
+	
+	return formatter
+}
+
+// 格式化输出
+func (of *OutputFormatter) Format(data interface{}) (string, error) {
+	of.mutex.RLock()
+	defer of.mutex.RUnlock()
+	
+	switch of.format.Type {
+	case "json":
+		return of.formatJSON(data)
+	case "csv":
+		return of.formatCSV(data)
+	case "table":
+		return of.formatTable(data)
+	case "custom":
+		return of.formatCustom(data)
+	default:
+		return fmt.Sprintf("%+v", data), nil
+	}
+}
+
+// JSON格式
+func (of *OutputFormatter) formatJSON(data interface{}) (string, error) {
+	buf, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(buf), nil
+}
+
+// CSV格式
+func (of *OutputFormatter) formatCSV(data interface{}) (string, error) {
+	// 简化版CSV格式化
+	return fmt.Sprintf("%+v", data), nil
+}
+
+// Table格式
+func (of *OutputFormatter) formatTable(data interface{}) (string, error) {
+	// 简化版表格格式化
+	return fmt.Sprintf("%+v", data), nil
+}
+
+// 自定义格式
+func (of *OutputFormatter) formatCustom(data interface{}) (string, error) {
+	if of.template == nil {
+		return fmt.Sprintf("%+v", data), nil
+	}
+	
+	var buf bytes.Buffer
+	if err := of.template.Execute(&buf, data); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }

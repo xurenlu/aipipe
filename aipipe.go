@@ -3357,13 +3357,6 @@ type ConfigTemplate struct {
 	Category    string `json:"category"`
 }
 
-// 输出格式化器
-type OutputFormatter struct {
-	format   OutputFormat
-	template *template.Template
-	mutex    sync.RWMutex
-}
-
 // 颜色支持
 type ColorSupport struct {
 	Enabled bool
