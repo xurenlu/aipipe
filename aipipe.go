@@ -15,7 +15,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -3490,19 +3489,19 @@ func (w *ConfigWizard) Start() error {
 	fmt.Println("欢迎使用AIPipe配置向导！")
 	fmt.Println("我们将引导您完成基本配置。")
 	fmt.Println()
-	
+
 	for w.currentStep < len(w.steps) {
 		step := w.steps[w.currentStep]
-		
+
 		fmt.Printf("步骤 %d/%d: %s\n", w.currentStep+1, len(w.steps), step.Title)
 		fmt.Printf("描述: %s\n", step.Description)
 		fmt.Println()
-		
+
 		response, err := w.promptStep(step)
 		if err != nil {
 			return fmt.Errorf("步骤 %d 输入错误: %v", w.currentStep+1, err)
 		}
-		
+
 		// 验证输入
 		if step.Validation != nil {
 			if err := step.Validation(response); err != nil {
@@ -3511,28 +3510,28 @@ func (w *ConfigWizard) Start() error {
 				continue
 			}
 		}
-		
+
 		// 保存响应
 		w.responses[step.ID] = response
-		
+
 		// 更新配置
 		w.updateConfig(step.ID, response)
-		
+
 		fmt.Println("✅ 配置已保存")
 		fmt.Println()
-		
+
 		w.currentStep++
 	}
-	
+
 	// 保存配置文件
 	if err := w.saveConfig(); err != nil {
 		return fmt.Errorf("保存配置文件失败: %v", err)
 	}
-	
+
 	fmt.Println("🎉 配置向导完成！")
 	fmt.Println("配置文件已保存到 ~/.config/aipipe.json")
 	fmt.Println("您现在可以使用 AIPipe 了！")
-	
+
 	return nil
 }
 
@@ -3559,20 +3558,20 @@ func (w *ConfigWizard) promptInput(step WizardStep) (string, error) {
 		prompt += fmt.Sprintf(" (默认: %v)", step.Default)
 	}
 	prompt += ": "
-	
+
 	fmt.Print(prompt)
-	
+
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err
 	}
-	
+
 	input = strings.TrimSpace(input)
 	if input == "" && step.Default != nil {
 		return step.Default.(string), nil
 	}
-	
+
 	return input, nil
 }
 
@@ -3582,32 +3581,32 @@ func (w *ConfigWizard) promptSelect(step WizardStep) (string, error) {
 	for i, option := range step.Options {
 		fmt.Printf("  %d. %s - %s\n", i+1, option.Label, option.Description)
 	}
-	
+
 	prompt := "请输入选项编号"
 	if step.Default != nil {
 		prompt += fmt.Sprintf(" (默认: %v)", step.Default)
 	}
 	prompt += ": "
-	
+
 	fmt.Print(prompt)
-	
+
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err
 	}
-	
+
 	input = strings.TrimSpace(input)
 	if input == "" && step.Default != nil {
 		return step.Default.(string), nil
 	}
-	
+
 	// 解析选择
 	choice, err := strconv.Atoi(input)
 	if err != nil || choice < 1 || choice > len(step.Options) {
 		return "", fmt.Errorf("无效的选择: %s", input)
 	}
-	
+
 	return step.Options[choice-1].Value, nil
 }
 
@@ -3618,20 +3617,20 @@ func (w *ConfigWizard) promptConfirm(step WizardStep) (bool, error) {
 		prompt += fmt.Sprintf(" (默认: %v)", step.Default)
 	}
 	prompt += " [y/N]: "
-	
+
 	fmt.Print(prompt)
-	
+
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return false, err
 	}
-	
+
 	input = strings.TrimSpace(strings.ToLower(input))
 	if input == "" && step.Default != nil {
 		return step.Default.(bool), nil
 	}
-	
+
 	return input == "y" || input == "yes", nil
 }
 
@@ -3642,25 +3641,25 @@ func (w *ConfigWizard) promptFile(step WizardStep) (string, error) {
 		prompt += fmt.Sprintf(" (默认: %v)", step.Default)
 	}
 	prompt += ": "
-	
+
 	fmt.Print(prompt)
-	
+
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return "", err
 	}
-	
+
 	input = strings.TrimSpace(input)
 	if input == "" && step.Default != nil {
 		return step.Default.(string), nil
 	}
-	
+
 	// 验证文件是否存在
 	if _, err := os.Stat(input); os.IsNotExist(err) {
 		return "", fmt.Errorf("文件不存在: %s", input)
 	}
-	
+
 	return input, nil
 }
 
@@ -3759,14 +3758,14 @@ func (w *ConfigWizard) saveConfig() error {
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return err
 	}
-	
+
 	configPath := filepath.Join(configDir, "aipipe.json")
-	
+
 	data, err := json.MarshalIndent(w.config, "", "  ")
 	if err != nil {
 		return err
 	}
-	
+
 	return os.WriteFile(configPath, data, 0644)
 }
 
