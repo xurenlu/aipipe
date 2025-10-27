@@ -132,6 +132,18 @@
     "scaling_interval": "30s",
     "enabled": true
   },
+  "io": {
+    "buffer_size": 65536,
+    "batch_size": 1000,
+    "flush_interval": "5s",
+    "async_io": true,
+    "read_ahead": 32768,
+    "write_behind": true,
+    "compression": false,
+    "compression_level": 6,
+    "cache_size": 10485760,
+    "enabled": true
+  },
   "notifiers": {
     "email": {
       "enabled": false,
