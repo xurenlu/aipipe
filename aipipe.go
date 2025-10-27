@@ -126,12 +126,12 @@ type FilterResult struct {
 
 // 缓存项
 type CacheItem struct {
-	Key        string      `json:"key"`
-	Value      interface{} `json:"value"`
-	ExpiresAt  time.Time   `json:"expires_at"`
-	CreatedAt  time.Time   `json:"created_at"`
-	AccessCount int        `json:"access_count"`
-	Size       int64       `json:"size"`
+	Key         string      `json:"key"`
+	Value       interface{} `json:"value"`
+	ExpiresAt   time.Time   `json:"expires_at"`
+	CreatedAt   time.Time   `json:"created_at"`
+	AccessCount int         `json:"access_count"`
+	Size        int64       `json:"size"`
 }
 
 // AI分析结果缓存
@@ -146,36 +146,36 @@ type AIAnalysisCache struct {
 
 // 规则匹配缓存
 type RuleMatchCache struct {
-	LogHash   string    `json:"log_hash"`
-	RuleID    string    `json:"rule_id"`
-	Matched   bool      `json:"matched"`
+	LogHash   string        `json:"log_hash"`
+	RuleID    string        `json:"rule_id"`
+	Matched   bool          `json:"matched"`
 	Result    *FilterResult `json:"result"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
+	CreatedAt time.Time     `json:"created_at"`
+	ExpiresAt time.Time     `json:"expires_at"`
 }
 
 // 缓存统计
 type CacheStats struct {
-	TotalItems     int     `json:"total_items"`
-	HitCount       int64   `json:"hit_count"`
-	MissCount      int64   `json:"miss_count"`
-	EvictionCount  int64   `json:"eviction_count"`
-	MemoryUsage    int64   `json:"memory_usage"`
-	HitRate        float64 `json:"hit_rate"`
-	ExpiredItems   int     `json:"expired_items"`
+	TotalItems    int     `json:"total_items"`
+	HitCount      int64   `json:"hit_count"`
+	MissCount     int64   `json:"miss_count"`
+	EvictionCount int64   `json:"eviction_count"`
+	MemoryUsage   int64   `json:"memory_usage"`
+	HitRate       float64 `json:"hit_rate"`
+	ExpiredItems  int     `json:"expired_items"`
 }
 
 // 缓存管理器
 type CacheManager struct {
-	aiCache      map[string]*AIAnalysisCache
-	ruleCache    map[string]*RuleMatchCache
-	configCache  map[string]*CacheItem
-	stats        CacheStats
-	mutex        sync.RWMutex
-	maxSize      int64
-	maxItems     int
+	aiCache         map[string]*AIAnalysisCache
+	ruleCache       map[string]*RuleMatchCache
+	configCache     map[string]*CacheItem
+	stats           CacheStats
+	mutex           sync.RWMutex
+	maxSize         int64
+	maxItems        int
 	cleanupInterval time.Duration
-	stopCleanup  chan bool
+	stopCleanup     chan bool
 }
 
 // 缓存配置
@@ -188,6 +188,96 @@ type CacheConfig struct {
 	ConfigTTL       time.Duration `json:"config_ttl"`       // 配置缓存过期时间
 	CleanupInterval time.Duration `json:"cleanup_interval"` // 清理间隔
 	Enabled         bool          `json:"enabled"`          // 是否启用缓存
+}
+
+// 工作池相关结构
+
+// 工作池配置
+type WorkerPoolConfig struct {
+	MaxWorkers    int           `json:"max_workers"`    // 最大工作协程数
+	QueueSize     int           `json:"queue_size"`     // 队列大小
+	BatchSize     int           `json:"batch_size"`     // 批处理大小
+	Timeout       time.Duration `json:"timeout"`        // 超时时间
+	RetryCount    int           `json:"retry_count"`    // 重试次数
+	BackoffDelay  time.Duration `json:"backoff_delay"`  // 退避延迟
+	Enabled       bool          `json:"enabled"`        // 是否启用
+}
+
+// 处理任务
+type ProcessingJob struct {
+	ID          string            `json:"id"`
+	Lines       []string          `json:"lines"`
+	Format      string            `json:"format"`
+	Priority    int               `json:"priority"`
+	CreatedAt   time.Time         `json:"created_at"`
+	Metadata    map[string]interface{} `json:"metadata"`
+}
+
+// 处理结果
+type ProcessingResult struct {
+	JobID         string            `json:"job_id"`
+	ProcessedLines int              `json:"processed_lines"`
+	FilteredLines  int              `json:"filtered_lines"`
+	AlertedLines   int              `json:"alerted_lines"`
+	ErrorCount     int              `json:"error_count"`
+	ProcessingTime time.Duration    `json:"processing_time"`
+	CreatedAt     time.Time        `json:"created_at"`
+	Results        []LogAnalysis    `json:"results"`
+	Errors         []string         `json:"errors"`
+	Metadata       map[string]interface{} `json:"metadata"`
+}
+
+// 工作池统计
+type WorkerPoolStats struct {
+	TotalJobs       int64         `json:"total_jobs"`
+	CompletedJobs   int64         `json:"completed_jobs"`
+	FailedJobs      int64         `json:"failed_jobs"`
+	ActiveWorkers   int           `json:"active_workers"`
+	QueueLength     int           `json:"queue_length"`
+	AverageTime     time.Duration `json:"average_time"`
+	TotalLines      int64         `json:"total_lines"`
+	ErrorRate       float64       `json:"error_rate"`
+	Throughput      float64       `json:"throughput"` // 每秒处理行数
+}
+
+// 工作池
+type WorkerPool struct {
+	config       WorkerPoolConfig
+	jobQueue     chan ProcessingJob
+	resultChan   chan ProcessingResult
+	workerPool   chan chan ProcessingJob
+	workers      []*Worker
+	quit         chan bool
+	stats        WorkerPoolStats
+	mutex        sync.RWMutex
+	startTime    time.Time
+}
+
+// 工作协程
+type Worker struct {
+	ID          int
+	WorkerPool  chan chan ProcessingJob
+	JobChannel  chan ProcessingJob
+	Quit        chan bool
+	WorkerPoolRef *WorkerPool
+}
+
+// 性能指标
+type PerformanceMetrics struct {
+	ProcessedLines    int64     `json:"processed_lines"`
+	FilteredLines     int64     `json:"filtered_lines"`
+	AlertedLines      int64     `json:"alerted_lines"`
+	APICalls          int64     `json:"api_calls"`
+	ProcessingTime    int64     `json:"processing_time_ms"`
+	ErrorCount        int64     `json:"error_count"`
+	CacheHits         int64     `json:"cache_hits"`
+	CacheMisses       int64     `json:"cache_misses"`
+	MemoryUsage       int64     `json:"memory_usage_bytes"`
+	LastUpdated       time.Time `json:"last_updated"`
+	Throughput        float64   `json:"throughput"`        // 每秒处理行数
+	AverageLatency    float64   `json:"average_latency"`   // 平均延迟(ms)
+	ErrorRate         float64   `json:"error_rate"`        // 错误率
+	CacheHitRate      float64   `json:"cache_hit_rate"`    // 缓存命中率
 }
 
 // 配置文件结构
@@ -210,9 +300,12 @@ type Config struct {
 
 	// 规则引擎配置
 	Rules []FilterRule `json:"rules"` // 过滤规则列表
-	
+
 	// 缓存配置
 	Cache CacheConfig `json:"cache"` // 缓存配置
+	
+	// 工作池配置
+	WorkerPool WorkerPoolConfig `json:"worker_pool"` // 工作池配置
 }
 
 // 错误级别
@@ -945,6 +1038,15 @@ var defaultConfig = Config{
 		CleanupInterval: 5 * time.Minute,
 		Enabled:         true,
 	},
+	WorkerPool: WorkerPoolConfig{
+		MaxWorkers:   4,
+		QueueSize:    100,
+		BatchSize:    10,
+		Timeout:      30 * time.Second,
+		RetryCount:   3,
+		BackoffDelay: 1 * time.Second,
+		Enabled:      true,
+	},
 }
 
 // 全局配置变量
@@ -961,6 +1063,9 @@ var ruleEngine *RuleEngine
 
 // 全局缓存管理器
 var cacheManager *CacheManager
+
+// 全局工作池管理器
+var workerPool *WorkerPool
 
 // 批处理配置
 const (
@@ -987,9 +1092,12 @@ type ChatResponse struct {
 
 // 日志分析结果（单条）
 type LogAnalysis struct {
+	Line        string  `json:"line"`        // 日志行内容
+	Important   bool    `json:"important"`   // 是否重要
 	ShouldFilter bool   `json:"should_filter"`
-	Summary      string `json:"summary"`
-	Reason       string `json:"reason"`
+	Summary     string  `json:"summary"`
+	Reason      string  `json:"reason"`
+	Confidence  float64 `json:"confidence"`  // 置信度
 }
 
 // 批量日志分析结果
@@ -1077,11 +1185,16 @@ var (
 	ruleRemove  = flag.String("rule-remove", "", "删除规则 (规则ID)")
 	ruleEnable  = flag.String("rule-enable", "", "启用规则 (规则ID)")
 	ruleDisable = flag.String("rule-disable", "", "禁用规则 (规则ID)")
-	
+
 	// 缓存管理命令
-	cacheStats      = flag.Bool("cache-stats", false, "显示缓存统计信息")
-	cacheClear      = flag.Bool("cache-clear", false, "清空所有缓存")
-	cacheTest       = flag.Bool("cache-test", false, "测试缓存功能")
+	cacheStats = flag.Bool("cache-stats", false, "显示缓存统计信息")
+	cacheClear = flag.Bool("cache-clear", false, "清空所有缓存")
+	cacheTest  = flag.Bool("cache-test", false, "测试缓存功能")
+	
+	// 工作池管理命令
+	workerStats     = flag.Bool("worker-stats", false, "显示工作池统计信息")
+	workerTest      = flag.Bool("worker-test", false, "测试工作池功能")
+	performanceStats = flag.Bool("perf-stats", false, "显示性能指标")
 
 	// journalctl 特定配置
 	journalServices = flag.String("journal-services", "", "监控的systemd服务列表，逗号分隔 (如: nginx,docker,postgresql)")
@@ -1249,19 +1362,34 @@ func main() {
 		handleRuleDisable()
 		return
 	}
-	
+
 	if *cacheStats {
 		handleCacheStats()
 		return
 	}
-	
+
 	if *cacheClear {
 		handleCacheClear()
 		return
 	}
-	
+
 	if *cacheTest {
 		handleCacheTest()
+		return
+	}
+	
+	if *workerStats {
+		handleWorkerStats()
+		return
+	}
+	
+	if *workerTest {
+		handleWorkerTest()
+		return
+	}
+	
+	if *performanceStats {
+		handlePerformanceStats()
 		return
 	}
 
@@ -1672,6 +1800,9 @@ func loadConfig() error {
 
 	// 初始化缓存管理器
 	cacheManager = NewCacheManager(globalConfig.Cache)
+
+	// 初始化工作池
+	workerPool = NewWorkerPool(globalConfig.WorkerPool)
 
 	// 验证配置
 	validator := NewConfigValidator()
@@ -4993,12 +5124,12 @@ func NewCacheManager(config CacheConfig) *CacheManager {
 		cleanupInterval: config.CleanupInterval,
 		stopCleanup:     make(chan bool),
 	}
-	
+
 	// 启动清理协程
 	if config.Enabled {
 		go cm.startCleanup()
 	}
-	
+
 	return cm
 }
 
@@ -5006,7 +5137,7 @@ func NewCacheManager(config CacheConfig) *CacheManager {
 func (cm *CacheManager) startCleanup() {
 	ticker := time.NewTicker(cm.cleanupInterval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -5021,10 +5152,10 @@ func (cm *CacheManager) startCleanup() {
 func (cm *CacheManager) cleanup() {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
-	
+
 	now := time.Now()
 	expiredCount := 0
-	
+
 	// 清理AI分析缓存
 	for key, item := range cm.aiCache {
 		if now.After(item.ExpiresAt) {
@@ -5032,7 +5163,7 @@ func (cm *CacheManager) cleanup() {
 			expiredCount++
 		}
 	}
-	
+
 	// 清理规则匹配缓存
 	for key, item := range cm.ruleCache {
 		if now.After(item.ExpiresAt) {
@@ -5040,7 +5171,7 @@ func (cm *CacheManager) cleanup() {
 			expiredCount++
 		}
 	}
-	
+
 	// 清理配置缓存
 	for key, item := range cm.configCache {
 		if now.After(item.ExpiresAt) {
@@ -5048,7 +5179,7 @@ func (cm *CacheManager) cleanup() {
 			expiredCount++
 		}
 	}
-	
+
 	cm.stats.ExpiredItems = expiredCount
 	cm.updateStats()
 }
@@ -5056,13 +5187,13 @@ func (cm *CacheManager) cleanup() {
 // 更新统计信息
 func (cm *CacheManager) updateStats() {
 	cm.stats.TotalItems = len(cm.aiCache) + len(cm.ruleCache) + len(cm.configCache)
-	
+
 	// 计算命中率
 	total := cm.stats.HitCount + cm.stats.MissCount
 	if total > 0 {
 		cm.stats.HitRate = float64(cm.stats.HitCount) / float64(total) * 100
 	}
-	
+
 	// 计算内存使用量
 	cm.stats.MemoryUsage = cm.calculateMemoryUsage()
 }
@@ -5070,22 +5201,22 @@ func (cm *CacheManager) updateStats() {
 // 计算内存使用量
 func (cm *CacheManager) calculateMemoryUsage() int64 {
 	var total int64
-	
+
 	for _, item := range cm.aiCache {
 		total += int64(len(item.LogHash) + len(item.Result) + len(item.Model))
 	}
-	
+
 	for _, item := range cm.ruleCache {
 		total += int64(len(item.LogHash) + len(item.RuleID))
 		if item.Result != nil {
 			total += int64(len(item.Result.Action) + len(item.Result.RuleID))
 		}
 	}
-	
+
 	for _, item := range cm.configCache {
 		total += int64(len(item.Key)) + item.Size
 	}
-	
+
 	return total
 }
 
@@ -5093,19 +5224,19 @@ func (cm *CacheManager) calculateMemoryUsage() int64 {
 func (cm *CacheManager) GetAIAnalysis(logHash string) (*AIAnalysisCache, bool) {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-	
+
 	item, exists := cm.aiCache[logHash]
 	if !exists {
 		cm.stats.MissCount++
 		return nil, false
 	}
-	
+
 	// 检查是否过期
 	if time.Now().After(item.ExpiresAt) {
 		cm.stats.MissCount++
 		return nil, false
 	}
-	
+
 	cm.stats.HitCount++
 	return item, true
 }
@@ -5114,12 +5245,12 @@ func (cm *CacheManager) GetAIAnalysis(logHash string) (*AIAnalysisCache, bool) {
 func (cm *CacheManager) SetAIAnalysis(logHash string, result *AIAnalysisCache) {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
-	
+
 	// 检查是否需要清理空间
 	if cm.needsEviction() {
 		cm.evictOldest()
 	}
-	
+
 	cm.aiCache[logHash] = result
 	cm.updateStats()
 }
@@ -5128,20 +5259,20 @@ func (cm *CacheManager) SetAIAnalysis(logHash string, result *AIAnalysisCache) {
 func (cm *CacheManager) GetRuleMatch(logHash, ruleID string) (*RuleMatchCache, bool) {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-	
+
 	key := logHash + ":" + ruleID
 	item, exists := cm.ruleCache[key]
 	if !exists {
 		cm.stats.MissCount++
 		return nil, false
 	}
-	
+
 	// 检查是否过期
 	if time.Now().After(item.ExpiresAt) {
 		cm.stats.MissCount++
 		return nil, false
 	}
-	
+
 	cm.stats.HitCount++
 	return item, true
 }
@@ -5150,12 +5281,12 @@ func (cm *CacheManager) GetRuleMatch(logHash, ruleID string) (*RuleMatchCache, b
 func (cm *CacheManager) SetRuleMatch(logHash, ruleID string, result *RuleMatchCache) {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
-	
+
 	// 检查是否需要清理空间
 	if cm.needsEviction() {
 		cm.evictOldest()
 	}
-	
+
 	key := logHash + ":" + ruleID
 	cm.ruleCache[key] = result
 	cm.updateStats()
@@ -5165,19 +5296,19 @@ func (cm *CacheManager) SetRuleMatch(logHash, ruleID string, result *RuleMatchCa
 func (cm *CacheManager) GetConfig(key string) (interface{}, bool) {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-	
+
 	item, exists := cm.configCache[key]
 	if !exists {
 		cm.stats.MissCount++
 		return nil, false
 	}
-	
+
 	// 检查是否过期
 	if time.Now().After(item.ExpiresAt) {
 		cm.stats.MissCount++
 		return nil, false
 	}
-	
+
 	item.AccessCount++
 	cm.stats.HitCount++
 	return item.Value, true
@@ -5187,22 +5318,22 @@ func (cm *CacheManager) GetConfig(key string) (interface{}, bool) {
 func (cm *CacheManager) SetConfig(key string, value interface{}, ttl time.Duration) {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
-	
+
 	// 检查是否需要清理空间
 	if cm.needsEviction() {
 		cm.evictOldest()
 	}
-	
+
 	now := time.Now()
 	item := &CacheItem{
-		Key:        key,
-		Value:      value,
-		CreatedAt:  now,
-		ExpiresAt:  now.Add(ttl),
+		Key:         key,
+		Value:       value,
+		CreatedAt:   now,
+		ExpiresAt:   now.Add(ttl),
 		AccessCount: 0,
-		Size:       cm.calculateItemSize(value),
+		Size:        cm.calculateItemSize(value),
 	}
-	
+
 	cm.configCache[key] = item
 	cm.updateStats()
 }
@@ -5226,14 +5357,14 @@ func (cm *CacheManager) evictOldest() {
 	// 简单的LRU策略：清理访问次数最少的项
 	var oldestKey string
 	var oldestAccess int = int(^uint(0) >> 1) // 最大int值
-	
+
 	for key, item := range cm.configCache {
 		if item.AccessCount < oldestAccess {
 			oldestAccess = item.AccessCount
 			oldestKey = key
 		}
 	}
-	
+
 	if oldestKey != "" {
 		delete(cm.configCache, oldestKey)
 		cm.stats.EvictionCount++
@@ -5244,7 +5375,7 @@ func (cm *CacheManager) evictOldest() {
 func (cm *CacheManager) Clear() {
 	cm.mutex.Lock()
 	defer cm.mutex.Unlock()
-	
+
 	cm.aiCache = make(map[string]*AIAnalysisCache)
 	cm.ruleCache = make(map[string]*RuleMatchCache)
 	cm.configCache = make(map[string]*CacheItem)
@@ -5255,7 +5386,7 @@ func (cm *CacheManager) Clear() {
 func (cm *CacheManager) GetStats() CacheStats {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-	
+
 	cm.updateStats()
 	return cm.stats
 }
@@ -5277,13 +5408,13 @@ func generateLogHash(logLine string) string {
 func handleCacheStats() {
 	fmt.Println("📊 缓存统计信息:")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	stats := cacheManager.GetStats()
 	fmt.Printf("总缓存项数: %d\n", stats.TotalItems)
 	fmt.Printf("缓存命中次数: %d\n", stats.HitCount)
@@ -5292,7 +5423,7 @@ func handleCacheStats() {
 	fmt.Printf("内存使用量: %d 字节 (%.2f MB)\n", stats.MemoryUsage, float64(stats.MemoryUsage)/(1024*1024))
 	fmt.Printf("清理次数: %d\n", stats.EvictionCount)
 	fmt.Printf("过期项数: %d\n", stats.ExpiredItems)
-	
+
 	// 显示各类型缓存详情
 	fmt.Println("\n缓存类型详情:")
 	fmt.Printf("  AI分析缓存: %d 项\n", len(cacheManager.aiCache))
@@ -5303,13 +5434,13 @@ func handleCacheStats() {
 // 清空所有缓存
 func handleCacheClear() {
 	fmt.Println("🗑️  清空所有缓存...")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	cacheManager.Clear()
 	fmt.Println("✅ 所有缓存已清空")
 }
@@ -5318,30 +5449,30 @@ func handleCacheClear() {
 func handleCacheTest() {
 	fmt.Println("🧪 测试缓存功能...")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载配置
 	if err := loadConfig(); err != nil {
 		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		os.Exit(1)
 	}
-	
+
 	// 测试配置缓存
 	testKey := "test_config"
 	testValue := map[string]interface{}{
-		"test": "value",
-		"number": 123,
+		"test":    "value",
+		"number":  123,
 		"enabled": true,
 	}
-	
+
 	fmt.Println("1. 测试配置缓存...")
 	cacheManager.SetConfig(testKey, testValue, 1*time.Minute)
-	
+
 	if cached, found := cacheManager.GetConfig(testKey); found {
 		fmt.Printf("   ✅ 配置缓存测试成功: %v\n", cached)
 	} else {
 		fmt.Println("   ❌ 配置缓存测试失败")
 	}
-	
+
 	// 测试AI分析缓存
 	testLogHash := generateLogHash("test log line")
 	aiResult := &AIAnalysisCache{
@@ -5352,16 +5483,16 @@ func handleCacheTest() {
 		CreatedAt:  time.Now(),
 		ExpiresAt:  time.Now().Add(1 * time.Hour),
 	}
-	
+
 	fmt.Println("2. 测试AI分析缓存...")
 	cacheManager.SetAIAnalysis(testLogHash, aiResult)
-	
+
 	if cached, found := cacheManager.GetAIAnalysis(testLogHash); found {
 		fmt.Printf("   ✅ AI分析缓存测试成功: %s\n", cached.Result)
 	} else {
 		fmt.Println("   ❌ AI分析缓存测试失败")
 	}
-	
+
 	// 测试规则匹配缓存
 	testRuleID := "test_rule"
 	ruleResult := &RuleMatchCache{
@@ -5372,22 +5503,520 @@ func handleCacheTest() {
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(1 * time.Hour),
 	}
-	
+
 	fmt.Println("3. 测试规则匹配缓存...")
 	cacheManager.SetRuleMatch(testLogHash, testRuleID, ruleResult)
-	
+
 	if cached, found := cacheManager.GetRuleMatch(testLogHash, testRuleID); found {
 		fmt.Printf("   ✅ 规则匹配缓存测试成功: %s\n", cached.Result.Action)
 	} else {
 		fmt.Println("   ❌ 规则匹配缓存测试失败")
 	}
-	
+
 	// 显示最终统计
 	fmt.Println("\n最终缓存统计:")
 	stats := cacheManager.GetStats()
 	fmt.Printf("  总缓存项数: %d\n", stats.TotalItems)
 	fmt.Printf("  缓存命中率: %.2f%%\n", stats.HitRate)
 	fmt.Printf("  内存使用量: %.2f KB\n", float64(stats.MemoryUsage)/1024)
-	
+
 	fmt.Println("\n✅ 缓存功能测试完成")
+}
+
+// 工作池方法
+
+// 创建新的工作池
+func NewWorkerPool(config WorkerPoolConfig) *WorkerPool {
+	wp := &WorkerPool{
+		config:     config,
+		jobQueue:   make(chan ProcessingJob, config.QueueSize),
+		resultChan: make(chan ProcessingResult, config.QueueSize),
+		workerPool: make(chan chan ProcessingJob, config.MaxWorkers),
+		workers:    make([]*Worker, 0, config.MaxWorkers),
+		quit:       make(chan bool),
+		startTime:  time.Now(),
+	}
+	
+	// 创建工作协程
+	for i := 0; i < config.MaxWorkers; i++ {
+		worker := NewWorker(i, wp)
+		wp.workers = append(wp.workers, worker)
+		worker.Start()
+	}
+	
+	// 启动调度器
+	go wp.dispatch()
+	
+	return wp
+}
+
+// 创建新的工作协程
+func NewWorker(id int, wp *WorkerPool) *Worker {
+	return &Worker{
+		ID:           id,
+		WorkerPool:   wp.workerPool,
+		JobChannel:   make(chan ProcessingJob),
+		Quit:         make(chan bool),
+		WorkerPoolRef: wp,
+	}
+}
+
+// 启动工作协程
+func (w *Worker) Start() {
+	go func() {
+		for {
+			// 将工作协程的通道注册到工作池
+			w.WorkerPool <- w.JobChannel
+			
+			select {
+			case job := <-w.JobChannel:
+				// 处理任务
+				w.processJob(job)
+			case <-w.Quit:
+				return
+			}
+		}
+	}()
+}
+
+// 停止工作协程
+func (w *Worker) Stop() {
+	go func() {
+		w.Quit <- true
+	}()
+}
+
+// 处理任务
+func (w *Worker) processJob(job ProcessingJob) {
+	startTime := time.Now()
+	
+	// 更新统计
+	w.WorkerPoolRef.mutex.Lock()
+	w.WorkerPoolRef.stats.ActiveWorkers++
+	w.WorkerPoolRef.mutex.Unlock()
+	
+	defer func() {
+		w.WorkerPoolRef.mutex.Lock()
+		w.WorkerPoolRef.stats.ActiveWorkers--
+		w.WorkerPoolRef.mutex.Unlock()
+	}()
+	
+	result := ProcessingResult{
+		JobID:         job.ID,
+		ProcessedLines: len(job.Lines),
+		CreatedAt:     time.Now(),
+		Results:       make([]LogAnalysis, 0),
+		Errors:        make([]string, 0),
+		Metadata:      make(map[string]interface{}),
+	}
+	
+	// 处理每一行日志
+	for _, line := range job.Lines {
+		// 检查缓存
+		logHash := generateLogHash(line)
+		if cached, found := cacheManager.GetAIAnalysis(logHash); found {
+			// 使用缓存结果
+			result.Results = append(result.Results, LogAnalysis{
+				Line:      line,
+				Important: true,
+				Reason:    cached.Result,
+				Confidence: cached.Confidence,
+			})
+			result.FilteredLines++
+			continue
+		}
+		
+		// 应用规则过滤
+		if globalConfig.LocalFilter && ruleEngine != nil {
+			filterResult := ruleEngine.Filter(line)
+			if filterResult.ShouldIgnore {
+				continue
+			}
+			if filterResult.ShouldProcess {
+				// 需要AI分析
+				analysis, err := analyzeLogLine(line, job.Format)
+				if err != nil {
+					result.ErrorCount++
+					result.Errors = append(result.Errors, fmt.Sprintf("分析失败: %v", err))
+					continue
+				}
+				
+				// 缓存结果
+				cacheResult := &AIAnalysisCache{
+					LogHash:    logHash,
+					Result:     analysis.Reason,
+					Confidence: analysis.Confidence,
+					Model:      globalConfig.Model,
+					CreatedAt:  time.Now(),
+					ExpiresAt:  time.Now().Add(globalConfig.Cache.AITTL),
+				}
+				cacheManager.SetAIAnalysis(logHash, cacheResult)
+				
+				result.Results = append(result.Results, *analysis)
+				if analysis.Important {
+					result.AlertedLines++
+				}
+			}
+		} else {
+			// 直接AI分析
+			analysis, err := analyzeLogLine(line, job.Format)
+			if err != nil {
+				result.ErrorCount++
+				result.Errors = append(result.Errors, fmt.Sprintf("分析失败: %v", err))
+				continue
+			}
+			
+			// 缓存结果
+			cacheResult := &AIAnalysisCache{
+				LogHash:    logHash,
+				Result:     analysis.Reason,
+				Confidence: analysis.Confidence,
+				Model:      globalConfig.Model,
+				CreatedAt:  time.Now(),
+				ExpiresAt:  time.Now().Add(globalConfig.Cache.AITTL),
+			}
+			cacheManager.SetAIAnalysis(logHash, cacheResult)
+			
+			result.Results = append(result.Results, *analysis)
+			if analysis.Important {
+				result.AlertedLines++
+			}
+		}
+	}
+	
+	result.ProcessingTime = time.Since(startTime)
+	
+	// 更新统计
+	w.WorkerPoolRef.mutex.Lock()
+	w.WorkerPoolRef.stats.CompletedJobs++
+	w.WorkerPoolRef.stats.TotalLines += int64(result.ProcessedLines)
+	w.WorkerPoolRef.mutex.Unlock()
+	
+	// 发送结果
+	w.WorkerPoolRef.resultChan <- result
+}
+
+// 调度器
+func (wp *WorkerPool) dispatch() {
+	for {
+		select {
+		case job := <-wp.jobQueue:
+			// 获取可用的工作协程
+			worker := <-wp.workerPool
+			// 分配任务
+			worker <- job
+			
+			// 更新统计
+			wp.mutex.Lock()
+			wp.stats.TotalJobs++
+			wp.stats.QueueLength = len(wp.jobQueue)
+			wp.mutex.Unlock()
+			
+		case <-wp.quit:
+			// 停止所有工作协程
+			for _, worker := range wp.workers {
+				worker.Stop()
+			}
+			return
+		}
+	}
+}
+
+// 提交任务
+func (wp *WorkerPool) SubmitJob(job ProcessingJob) error {
+	if !wp.config.Enabled {
+		return fmt.Errorf("工作池未启用")
+	}
+	
+	select {
+	case wp.jobQueue <- job:
+		return nil
+	default:
+		return fmt.Errorf("工作队列已满")
+	}
+}
+
+// 获取结果
+func (wp *WorkerPool) GetResult() <-chan ProcessingResult {
+	return wp.resultChan
+}
+
+// 获取统计信息
+func (wp *WorkerPool) GetStats() WorkerPoolStats {
+	wp.mutex.RLock()
+	defer wp.mutex.RUnlock()
+	
+	// 计算吞吐量
+	elapsed := time.Since(wp.startTime)
+	if elapsed > 0 {
+		wp.stats.Throughput = float64(wp.stats.TotalLines) / elapsed.Seconds()
+	}
+	
+	// 计算错误率
+	if wp.stats.TotalJobs > 0 {
+		wp.stats.ErrorRate = float64(wp.stats.FailedJobs) / float64(wp.stats.TotalJobs) * 100
+	}
+	
+	return wp.stats
+}
+
+// 停止工作池
+func (wp *WorkerPool) Stop() {
+	close(wp.quit)
+}
+
+// 性能指标收集器
+type MetricsCollector struct {
+	metrics PerformanceMetrics
+	mutex   sync.RWMutex
+}
+
+// 创建新的指标收集器
+func NewMetricsCollector() *MetricsCollector {
+	return &MetricsCollector{
+		metrics: PerformanceMetrics{
+			LastUpdated: time.Now(),
+		},
+	}
+}
+
+// 更新指标
+func (mc *MetricsCollector) UpdateMetrics(processed, filtered, alerted, apiCalls, errors int64, processingTime time.Duration) {
+	mc.mutex.Lock()
+	defer mc.mutex.Unlock()
+	
+	mc.metrics.ProcessedLines += processed
+	mc.metrics.FilteredLines += filtered
+	mc.metrics.AlertedLines += alerted
+	mc.metrics.APICalls += apiCalls
+	mc.metrics.ErrorCount += errors
+	mc.metrics.ProcessingTime += int64(processingTime.Milliseconds())
+	mc.metrics.LastUpdated = time.Now()
+	
+	// 计算吞吐量
+	elapsed := time.Since(mc.metrics.LastUpdated)
+	if elapsed > 0 {
+		mc.metrics.Throughput = float64(mc.metrics.ProcessedLines) / elapsed.Seconds()
+	}
+	
+	// 计算平均延迟
+	if mc.metrics.ProcessedLines > 0 {
+		mc.metrics.AverageLatency = float64(mc.metrics.ProcessingTime) / float64(mc.metrics.ProcessedLines)
+	}
+	
+	// 计算错误率
+	if mc.metrics.ProcessedLines > 0 {
+		mc.metrics.ErrorRate = float64(mc.metrics.ErrorCount) / float64(mc.metrics.ProcessedLines) * 100
+	}
+}
+
+// 更新缓存指标
+func (mc *MetricsCollector) UpdateCacheMetrics(hits, misses int64) {
+	mc.mutex.Lock()
+	defer mc.mutex.Unlock()
+	
+	mc.metrics.CacheHits += hits
+	mc.metrics.CacheMisses += misses
+	
+	// 计算缓存命中率
+	total := mc.metrics.CacheHits + mc.metrics.CacheMisses
+	if total > 0 {
+		mc.metrics.CacheHitRate = float64(mc.metrics.CacheHits) / float64(total) * 100
+	}
+}
+
+// 更新内存使用
+func (mc *MetricsCollector) UpdateMemoryUsage(usage int64) {
+	mc.mutex.Lock()
+	defer mc.mutex.Unlock()
+	
+	mc.metrics.MemoryUsage = usage
+}
+
+// 获取指标
+func (mc *MetricsCollector) GetMetrics() PerformanceMetrics {
+	mc.mutex.RLock()
+	defer mc.mutex.RUnlock()
+	
+	return mc.metrics
+}
+
+// 分析单行日志（工作池使用）
+func analyzeLogLine(line, format string) (*LogAnalysis, error) {
+	analysis, err := analyzeLog(line, format)
+	if err != nil {
+		return nil, err
+	}
+	
+	// 设置行内容
+	analysis.Line = line
+	
+	// 根据ShouldFilter设置Important
+	analysis.Important = !analysis.ShouldFilter
+	
+	// 设置默认置信度
+	if analysis.Confidence == 0 {
+		analysis.Confidence = 0.8
+	}
+	
+	return analysis, nil
+}
+
+// 工作池管理命令处理函数
+
+// 显示工作池统计信息
+func handleWorkerStats() {
+	fmt.Println("📊 工作池统计信息:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	stats := workerPool.GetStats()
+	fmt.Printf("总任务数: %d\n", stats.TotalJobs)
+	fmt.Printf("完成任务数: %d\n", stats.CompletedJobs)
+	fmt.Printf("失败任务数: %d\n", stats.FailedJobs)
+	fmt.Printf("活跃工作协程数: %d\n", stats.ActiveWorkers)
+	fmt.Printf("队列长度: %d\n", stats.QueueLength)
+	fmt.Printf("平均处理时间: %v\n", stats.AverageTime)
+	fmt.Printf("总处理行数: %d\n", stats.TotalLines)
+	fmt.Printf("错误率: %.2f%%\n", stats.ErrorRate)
+	fmt.Printf("吞吐量: %.2f 行/秒\n", stats.Throughput)
+	
+	// 显示配置信息
+	fmt.Println("\n工作池配置:")
+	fmt.Printf("  最大工作协程数: %d\n", globalConfig.WorkerPool.MaxWorkers)
+	fmt.Printf("  队列大小: %d\n", globalConfig.WorkerPool.QueueSize)
+	fmt.Printf("  批处理大小: %d\n", globalConfig.WorkerPool.BatchSize)
+	fmt.Printf("  超时时间: %v\n", globalConfig.WorkerPool.Timeout)
+	fmt.Printf("  重试次数: %d\n", globalConfig.WorkerPool.RetryCount)
+	fmt.Printf("  退避延迟: %v\n", globalConfig.WorkerPool.BackoffDelay)
+	fmt.Printf("  启用状态: %t\n", globalConfig.WorkerPool.Enabled)
+}
+
+// 测试工作池功能
+func handleWorkerTest() {
+	fmt.Println("🧪 测试工作池功能...")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 创建测试任务
+	testLines := []string{
+		"2024-01-01 10:00:00 [ERROR] Database connection failed",
+		"2024-01-01 10:00:01 [INFO] User login successful",
+		"2024-01-01 10:00:02 [WARN] High memory usage detected",
+		"2024-01-01 10:00:03 [DEBUG] Processing request",
+		"2024-01-01 10:00:04 [ERROR] File not found",
+	}
+	
+	job := ProcessingJob{
+		ID:        "test_job_1",
+		Lines:     testLines,
+		Format:    "java",
+		Priority:  1,
+		CreatedAt: time.Now(),
+		Metadata: map[string]interface{}{
+			"test": true,
+		},
+	}
+	
+	fmt.Println("1. 提交测试任务...")
+	if err := workerPool.SubmitJob(job); err != nil {
+		fmt.Printf("   ❌ 任务提交失败: %v\n", err)
+		return
+	}
+	fmt.Println("   ✅ 任务提交成功")
+	
+	// 等待结果
+	fmt.Println("2. 等待处理结果...")
+	timeout := time.After(30 * time.Second)
+	
+	select {
+	case result := <-workerPool.GetResult():
+		fmt.Printf("   ✅ 任务处理完成: %s\n", result.JobID)
+		fmt.Printf("   处理行数: %d\n", result.ProcessedLines)
+		fmt.Printf("   过滤行数: %d\n", result.FilteredLines)
+		fmt.Printf("   告警行数: %d\n", result.AlertedLines)
+		fmt.Printf("   错误数: %d\n", result.ErrorCount)
+		fmt.Printf("   处理时间: %v\n", result.ProcessingTime)
+		fmt.Printf("   结果数: %d\n", len(result.Results))
+		
+		if len(result.Errors) > 0 {
+			fmt.Println("   错误详情:")
+			for i, err := range result.Errors {
+				fmt.Printf("     %d. %s\n", i+1, err)
+			}
+		}
+		
+	case <-timeout:
+		fmt.Println("   ❌ 任务处理超时")
+		return
+	}
+	
+	// 显示最终统计
+	fmt.Println("\n最终工作池统计:")
+	stats := workerPool.GetStats()
+	fmt.Printf("  总任务数: %d\n", stats.TotalJobs)
+	fmt.Printf("  完成任务数: %d\n", stats.CompletedJobs)
+	fmt.Printf("  吞吐量: %.2f 行/秒\n", stats.Throughput)
+	
+	fmt.Println("\n✅ 工作池功能测试完成")
+}
+
+// 显示性能指标
+func handlePerformanceStats() {
+	fmt.Println("📈 性能指标:")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	
+	// 加载配置
+	if err := loadConfig(); err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		os.Exit(1)
+	}
+	
+	// 获取缓存统计
+	cacheStats := cacheManager.GetStats()
+	
+	// 获取工作池统计
+	workerStats := workerPool.GetStats()
+	
+	// 计算内存使用
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	
+	fmt.Println("处理统计:")
+	fmt.Printf("  总处理行数: %d\n", workerStats.TotalLines)
+	fmt.Printf("  完成任务数: %d\n", workerStats.CompletedJobs)
+	fmt.Printf("  失败任务数: %d\n", workerStats.FailedJobs)
+	fmt.Printf("  错误率: %.2f%%\n", workerStats.ErrorRate)
+	
+	fmt.Println("\n性能指标:")
+	fmt.Printf("  吞吐量: %.2f 行/秒\n", workerStats.Throughput)
+	fmt.Printf("  平均处理时间: %v\n", workerStats.AverageTime)
+	fmt.Printf("  活跃工作协程: %d\n", workerStats.ActiveWorkers)
+	
+	fmt.Println("\n缓存统计:")
+	fmt.Printf("  缓存命中次数: %d\n", cacheStats.HitCount)
+	fmt.Printf("  缓存未命中次数: %d\n", cacheStats.MissCount)
+	fmt.Printf("  缓存命中率: %.2f%%\n", cacheStats.HitRate)
+	fmt.Printf("  总缓存项数: %d\n", cacheStats.TotalItems)
+	
+	fmt.Println("\n内存使用:")
+	fmt.Printf("  当前内存使用: %.2f MB\n", float64(m.Alloc)/(1024*1024))
+	fmt.Printf("  系统内存使用: %.2f MB\n", float64(m.Sys)/(1024*1024))
+	fmt.Printf("  垃圾回收次数: %d\n", m.NumGC)
+	fmt.Printf("  垃圾回收时间: %v\n", time.Duration(m.PauseTotalNs))
+	
+	fmt.Println("\n系统信息:")
+	fmt.Printf("  Go版本: %s\n", runtime.Version())
+	fmt.Printf("  CPU核心数: %d\n", runtime.NumCPU())
+	fmt.Printf("  Goroutine数: %d\n", runtime.NumGoroutine())
 }

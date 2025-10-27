@@ -101,6 +101,15 @@
     "cleanup_interval": "5m",
     "enabled": true
   },
+  "worker_pool": {
+    "max_workers": 4,
+    "queue_size": 100,
+    "batch_size": 10,
+    "timeout": "30s",
+    "retry_count": 3,
+    "backoff_delay": "1s",
+    "enabled": true
+  },
   "notifiers": {
     "email": {
       "enabled": false,
