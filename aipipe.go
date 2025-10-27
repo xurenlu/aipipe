@@ -22,7 +22,6 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -8094,10 +8093,10 @@ func NewConfigWizard() *ConfigWizard {
 		config:      defaultConfig,
 		responses:   make(map[string]interface{}),
 	}
-	
+
 	// 初始化向导步骤
 	wizard.initSteps()
-	
+
 	return wizard
 }
 
@@ -8195,15 +8194,15 @@ func validateURL(value interface{}) error {
 	if !ok {
 		return fmt.Errorf("URL必须是字符串")
 	}
-	
+
 	if url == "" {
 		return fmt.Errorf("URL不能为空")
 	}
-	
+
 	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
 		return fmt.Errorf("URL必须以http://或https://开头")
 	}
-	
+
 	return nil
 }
 
@@ -8213,70 +8212,14 @@ func validateToken(value interface{}) error {
 	if !ok {
 		return fmt.Errorf("Token必须是字符串")
 	}
-	
+
 	if token == "" {
 		return fmt.Errorf("Token不能为空")
 	}
-	
+
 	if len(token) < 10 {
 		return fmt.Errorf("Token长度至少10个字符")
 	}
-	
+
 	return nil
-}
-
-// 处理配置向导
-func handleConfigInit() {
-	fmt.Println("🎯 启动配置向导...")
-	wizard := NewConfigWizard()
-	if err := wizard.Start(); err != nil {
-		fmt.Printf("❌ 配置向导失败: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-// 处理配置模板
-func handleConfigTemplate() {
-	fmt.Println("📋 配置模板:")
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
-	// 显示示例配置
-	template := Config{
-		AIEndpoint:   "https://your-ai-server.com/api/v1/chat/completions",
-		Token:        "your-api-token-here",
-		Model:        "gpt-4",
-		CustomPrompt: "你的自定义提示词",
-		MaxRetries:   3,
-		Timeout:      30,
-		RateLimit:    100,
-		LocalFilter:  true,
-		OutputFormat: OutputFormat{
-			Type:     "table",
-			Color:    true,
-			Width:    120,
-			Headers:  true,
-		},
-		LogLevel: LogLevelConfig{
-			Level:     "info",
-			ShowInfo:  true,
-			ShowWarn:  true,
-			ShowError: true,
-			ShowFatal: true,
-			MinLevel:  "info",
-			MaxLevel:  "fatal",
-			Enabled:   true,
-		},
-	}
-	
-	data, err := json.MarshalIndent(template, "", "  ")
-	if err != nil {
-		fmt.Printf("❌ 生成模板失败: %v\n", err)
-		os.Exit(1)
-	}
-	
-	fmt.Println(string(data))
-	fmt.Println("\n💡 提示:")
-	fmt.Println("1. 将上述配置保存到 ~/.config/aipipe.json")
-	fmt.Println("2. 修改 AIEndpoint、Token 和 Model 为你的实际值")
-	fmt.Println("3. 使用 --config-init 启动交互式配置向导")
 }
