@@ -23,6 +23,92 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
+// 主配置结构
+type Config struct {
+	AIEndpoint   string `json:"ai_endpoint"`
+	Token        string `json:"token"`
+	Model        string `json:"model"`
+	CustomPrompt string `json:"custom_prompt"`
+	MaxRetries   int    `json:"max_retries"`
+	Timeout      int    `json:"timeout"`
+	RateLimit    int    `json:"rate_limit"`
+	LocalFilter  bool   `json:"local_filter"`
+}
+
+// 工作协程
+type Worker struct {
+	ID            int
+	ProcessedJobs int64
+	TotalTime     time.Duration
+	AverageTime   time.Duration
+	ErrorCount    int64
+	LastActivity  time.Time
+	CurrentLoad   int64
+	IsHealthy     bool
+}
+
+// 处理任务
+type ProcessingJob struct {
+	ID       string
+	Data     string
+	Priority TaskPriority
+	Created  time.Time
+}
+
+// I/O统计
+type IOStats struct {
+	ReadBytes   int64
+	WriteBytes  int64
+	ReadOps     int64
+	WriteOps    int64
+	ReadTime    time.Duration
+	WriteTime   time.Duration
+	CacheHits   int64
+	CacheMisses int64
+}
+
+// 并发统计
+type ConcurrencyStats struct {
+	ActiveWorkers   int
+	TotalJobs       int64
+	CompletedJobs   int64
+	FailedJobs      int64
+	AverageWaitTime time.Duration
+	AverageProcTime time.Duration
+	Throughput      float64
+	ErrorRate       float64
+}
+
+// 配置验证器
+type ConfigValidator struct {
+	errors []ConfigValidationError
+}
+
+// 配置验证错误
+type ConfigValidationError struct {
+	Field   string
+	Message string
+}
+
+// AI服务
+type AIService struct {
+	Name     string
+	Endpoint string
+	Token    string
+	Model    string
+	Enabled  bool
+	Priority int
+}
+
+// AI服务管理器
+type AIServiceManager struct {
+	services    []AIService
+	current     int
+	fallback    bool
+	rateLimiter map[string]time.Time
+	mutex       sync.RWMutex
+}
+
 // 过滤结果
 type FilterResult struct {
 	Action          string `json:"action"`           // 动作
