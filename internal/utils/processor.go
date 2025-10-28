@@ -59,7 +59,7 @@ func ProcessStdin(cfg *config.Config, showNotImportant bool) {
 				if analysis.Reason != "" {
 					fmt.Printf("   原因: %s\n", analysis.Reason)
 				}
-				
+
 				// 发送通知
 				go sendNotification(analysis.Summary, line)
 				alertCount++
