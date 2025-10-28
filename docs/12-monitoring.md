@@ -105,8 +105,8 @@ free -h
 ps aux --sort=-%mem | head
 
 # 优化内存配置
-aipipe config set --key "memory.max_memory_usage" --value "512MB"
-aipipe config set --key "cache.max_size" --value "500"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置内存和缓存限制
 ```
 
 ### 2. CPU 优化
@@ -117,8 +117,8 @@ htop
 iostat -x 1
 
 # 优化并发配置
-aipipe config set --key "concurrency.max_workers" --value "4"
-aipipe config set --key "batch_processing.batch_size" --value "10"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置并发和批处理参数
 ```
 
 ### 3. 磁盘优化

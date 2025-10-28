@@ -153,7 +153,8 @@ aipipe cache metrics --realtime
 
 ```bash
 # 启用缓存
-aipipe config set --key "cache.enabled" --value "true"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置 "cache": {"enabled": true}
 
 # 分析重复日志
 echo "ERROR Database connection failed" | aipipe analyze --format java
@@ -164,7 +165,8 @@ echo "ERROR Database connection failed" | aipipe analyze --format java  # 从缓
 
 ```bash
 # 启用批处理缓存
-aipipe config set --key "cache.batch_processing" --value "true"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置批处理缓存参数
 
 # 批量处理日志
 cat logs/*.log | aipipe analyze --format java
@@ -174,7 +176,8 @@ cat logs/*.log | aipipe analyze --format java
 
 ```bash
 # 启用规则缓存
-aipipe config set --key "cache.rules" --value "true"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置规则缓存参数
 
 # 应用规则
 aipipe rules apply --file logs/app.log

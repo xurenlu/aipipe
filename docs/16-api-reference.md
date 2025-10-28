@@ -98,7 +98,8 @@ aipipe config init
 aipipe config show
 
 # 设置配置
-aipipe config set --key "ai_model" --value "gpt-4"
+# 编辑配置文件 ~/.aipipe/config.json
+# 修改 "ai_model" 字段的值为 "gpt-4"
 
 # 验证配置
 aipipe config validate

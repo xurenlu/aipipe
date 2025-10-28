@@ -77,7 +77,8 @@ echo $OPENAI_API_KEY
 curl -H "Authorization: Bearer $OPENAI_API_KEY" https://api.openai.com/v1/models
 
 # 更新 API 密钥
-aipipe config set --key "ai_api_key" --value "sk-your-new-key"
+# 编辑配置文件 ~/.aipipe/config.json
+# 修改 "ai_api_key" 字段的值
 ```
 
 ## 🔍 分析问题
@@ -95,7 +96,8 @@ aipipe analyze --format java --verbose
 aipipe analyze --format java --prompt-file prompts/custom.txt
 
 # 调整分析参数
-aipipe config set --key "ai_model" --value "gpt-4"
+# 编辑配置文件 ~/.aipipe/config.json
+# 修改 "ai_model" 字段的值为 "gpt-4"
 ```
 
 ### 问题2: 分析速度慢
@@ -105,13 +107,16 @@ aipipe config set --key "ai_model" --value "gpt-4"
 **解决方案**:
 ```bash
 # 启用本地过滤
-aipipe config set --key "local_filter" --value "true"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置 "local_filter": true
 
 # 启用缓存
-aipipe config set --key "cache.enabled" --value "true"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置 "cache": {"enabled": true}
 
 # 调整超时设置
-aipipe config set --key "timeout" --value "30"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置 "timeout": 30
 ```
 
 ## 📁 监控问题
@@ -197,8 +202,8 @@ ps aux | grep aipipe
 free -h
 
 # 调整内存配置
-aipipe config set --key "memory.max_memory_usage" --value "512MB"
-aipipe config set --key "cache.max_size" --value "100"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置内存和缓存限制
 
 # 重启服务
 systemctl restart aipipe
@@ -214,11 +219,8 @@ systemctl restart aipipe
 top -p $(pgrep aipipe)
 
 # 调整并发配置
-aipipe config set --key "concurrency.max_workers" --value "2"
-aipipe config set --key "batch_processing.batch_size" --value "5"
-
-# 启用批处理
-aipipe config set --key "batch_processing.enabled" --value "true"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置并发和批处理参数
 ```
 
 ## 🔄 服务问题

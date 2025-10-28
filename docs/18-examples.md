@@ -221,15 +221,12 @@ aipipe dashboard show
 
 ```bash
 # 1. 配置邮件通知
-aipipe config set --key "notifications.email.enabled" --value "true"
-aipipe config set --key "notifications.email.smtp_host" --value "smtp.gmail.com"
-aipipe config set --key "notifications.email.username" --value "your-email@gmail.com"
-aipipe config set --key "notifications.email.password" --value "your-app-password"
-aipipe config set --key "notifications.email.to" --value "admin@example.com"
+# 编辑配置文件 ~/.aipipe/config.json
+# 添加邮件通知配置
 
 # 2. 配置系统通知
-aipipe config set --key "notifications.system.enabled" --value "true"
-aipipe config set --key "notifications.system.sound" --value "true"
+# 编辑配置文件 ~/.aipipe/config.json
+# 添加系统通知配置
 
 # 3. 测试通知
 aipipe notify test
@@ -319,9 +316,8 @@ aipipe monitor
 
 ```bash
 # 1. 启用批处理
-aipipe config set --key "batch_processing.enabled" --value "true"
-aipipe config set --key "batch_processing.batch_size" --value "10"
-aipipe config set --key "batch_processing.batch_timeout" --value "5"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置批处理参数
 
 # 2. 启动监控
 aipipe monitor
@@ -331,9 +327,8 @@ aipipe monitor
 
 ```bash
 # 1. 启用缓存
-aipipe config set --key "cache.enabled" --value "true"
-aipipe config set --key "cache.ttl" --value "3600"
-aipipe config set --key "cache.max_size" --value "1000"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置缓存参数
 
 # 2. 查看缓存统计
 aipipe cache stats
@@ -343,8 +338,8 @@ aipipe cache stats
 
 ```bash
 # 1. 设置并发参数
-aipipe config set --key "concurrency.max_workers" --value "5"
-aipipe config set --key "concurrency.queue_size" --value "100"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置并发参数
 
 # 2. 启动监控
 aipipe monitor

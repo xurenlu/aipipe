@@ -262,7 +262,8 @@ aipipe ai add --name "primary" --endpoint "https://api.openai.com/v1/chat/comple
 aipipe ai add --name "backup" --endpoint "https://backup-api.com/v1/chat/completions" --priority 2
 
 # 启用故障转移
-aipipe config set --key "failover.enabled" --value "true"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置故障转移参数
 ```
 
 ### 场景2: 负载均衡
@@ -273,7 +274,8 @@ aipipe ai add --name "service1" --endpoint "https://api1.com/v1/chat/completions
 aipipe ai add --name "service2" --endpoint "https://api2.com/v1/chat/completions" --weight 2
 
 # 启用负载均衡
-aipipe config set --key "load_balancing.strategy" --value "weighted"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置负载均衡策略
 ```
 
 ### 场景3: 成本优化
@@ -284,7 +286,8 @@ aipipe ai add --name "cheap-model" --model "gpt-3.5-turbo" --cost-per-token 0.00
 aipipe ai add --name "expensive-model" --model "gpt-4" --cost-per-token 0.03
 
 # 设置成本阈值
-aipipe config set --key "cost_optimization.max_cost_per_request" --value "0.01"
+# 编辑配置文件 ~/.aipipe/config.json
+# 设置成本优化参数
 ```
 
 ## 🔍 故障排除
