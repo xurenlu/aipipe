@@ -69,15 +69,14 @@ AIPipe 的提示词管理系统允许用户自定义 AI 分析提示词，优化
 
 ### 1. 使用提示词文件
 
+AIPipe 支持通过配置文件指定自定义提示词文件：
+
 ```bash
-# 使用默认提示词
+# 配置提示词文件
+aipipe config set --key "prompt_file" --value "prompts/custom.txt"
+
+# 使用配置的提示词文件
 aipipe analyze --format java
-
-# 使用自定义提示词
-aipipe analyze --format java --prompt-file prompts/custom.txt
-
-# 使用提示词文件配置
-aipipe config set --key "prompt_file" --value "prompts/advanced.txt"
 ```
 
 ### 2. 创建提示词
@@ -102,11 +101,15 @@ EOF
 ### 3. 测试提示词
 
 ```bash
-# 测试提示词
-aipipe analyze --format java --prompt-file prompts/custom.txt --test
+# 测试提示词效果
+echo "ERROR Database connection failed" | aipipe analyze --format java
 
-# 测试特定日志
-echo "ERROR Database connection failed" | aipipe analyze --format java --prompt-file prompts/custom.txt
+# 比较不同提示词的效果
+aipipe config set --key "prompt_file" --value "prompts/default.txt"
+echo "ERROR Database connection failed" | aipipe analyze --format java
+
+aipipe config set --key "prompt_file" --value "prompts/custom.txt"
+echo "ERROR Database connection failed" | aipipe analyze --format java
 ```
 
 ## 📋 提示词变量
@@ -197,66 +200,81 @@ echo "ERROR Database connection failed" | aipipe analyze --format java --prompt-
 
 ## 🔄 提示词优化
 
-### 1. 性能优化
+### 1. 手动优化
+
+通过编辑提示词文件来优化效果：
 
 ```bash
-# 优化提示词长度
-aipipe prompt optimize --file prompts/custom.txt --max-tokens 1000
+# 编辑提示词文件
+nano prompts/custom.txt
 
-# 压缩提示词
-aipipe prompt compress --file prompts/custom.txt
+# 测试优化效果
+echo "ERROR Database connection failed" | aipipe analyze --format java
 ```
 
-### 2. 效果优化
+### 2. 效果测试
 
 ```bash
-# 测试提示词效果
-aipipe prompt test --file prompts/custom.txt --test-data test-logs.txt
+# 使用不同提示词测试
+aipipe config set --key "prompt_file" --value "prompts/default.txt"
+echo "ERROR Database connection failed" | aipipe analyze --format java
 
-# 比较提示词效果
-aipipe prompt compare prompts/default.txt prompts/advanced.txt
+aipipe config set --key "prompt_file" --value "prompts/custom.txt"
+echo "ERROR Database connection failed" | aipipe analyze --format java
 ```
 
-### 3. 自动优化
+### 3. 变量优化
 
-```bash
-# 自动优化提示词
-aipipe prompt auto-optimize --file prompts/custom.txt
+通过调整提示词变量来优化效果：
 
-# 基于历史数据优化
-aipipe prompt optimize --file prompts/custom.txt --history
+```json
+{
+  "prompt_variables": {
+    "format": "java",
+    "environment": "production",
+    "critical_keywords": "ERROR,FATAL,CRITICAL,Exception"
+  }
+}
 ```
 
-## 📊 提示词统计
+## 📊 提示词效果
 
-### 1. 使用统计
+### 1. 测试不同提示词
 
 ```bash
-# 查看提示词使用统计
-aipipe prompt stats
+# 测试默认提示词
+aipipe config set --key "prompt_file" --value "prompts/default.txt"
+echo "ERROR Database connection failed" | aipipe analyze --format java
 
-# 查看特定提示词统计
-aipipe prompt stats --file prompts/custom.txt
+# 测试高级提示词
+aipipe config set --key "prompt_file" --value "prompts/advanced.txt"
+echo "ERROR Database connection failed" | aipipe analyze --format java
+
+# 测试简单提示词
+aipipe config set --key "prompt_file" --value "prompts/simple.txt"
+echo "ERROR Database connection failed" | aipipe analyze --format java
 ```
 
-### 2. 效果统计
+### 2. 效果对比
+
+通过比较不同提示词的分析结果来选择最佳提示词：
 
 ```bash
-# 查看分析效果
-aipipe prompt effectiveness
+# 创建测试日志文件
+cat > test-logs.txt << EOF
+ERROR Database connection failed
+WARN High memory usage detected
+INFO User login successful
+DEBUG Processing request
+EOF
 
-# 查看准确率
-aipipe prompt accuracy
-```
-
-### 3. 成本统计
-
-```bash
-# 查看提示词成本
-aipipe prompt cost
-
-# 查看令牌使用
-aipipe prompt tokens
+# 使用不同提示词测试
+for prompt in prompts/*.txt; do
+    echo "测试提示词: $prompt"
+    aipipe config set --key "prompt_file" --value "$prompt"
+    cat test-logs.txt | aipipe analyze --format java
+    echo "---"
+done
 ```
 
 ## 🎯 使用场景
@@ -307,31 +325,38 @@ aipipe analyze --format nginx --prompt-file prompts/nginx.txt
 ### 1. 提示词问题
 
 ```bash
-# 验证提示词格式
-aipipe prompt validate --file prompts/custom.txt
+# 检查提示词文件是否存在
+ls -la prompts/custom.txt
 
-# 检查提示词变量
-aipipe prompt check-variables --file prompts/custom.txt
+# 检查提示词文件内容
+cat prompts/custom.txt
+
+# 检查配置文件中的提示词文件路径
+aipipe config show --key "prompt_file"
 ```
 
 ### 2. 效果问题
 
 ```bash
-# 检查分析效果
-aipipe prompt test --file prompts/custom.txt --verbose
+# 测试提示词效果
+echo "ERROR Database connection failed" | aipipe analyze --format java --verbose
 
-# 调试提示词
-aipipe prompt debug --file prompts/custom.txt
+# 检查提示词变量替换
+grep -n "{format}" prompts/custom.txt
+grep -n "{log_line}" prompts/custom.txt
 ```
 
-### 3. 性能问题
+### 3. 配置问题
 
 ```bash
-# 检查提示词性能
-aipipe prompt performance --file prompts/custom.txt
+# 检查配置文件
+aipipe config validate
 
-# 优化提示词
-aipipe prompt optimize --file prompts/custom.txt
+# 重新设置提示词文件
+aipipe config set --key "prompt_file" --value "prompts/custom.txt"
+
+# 测试配置
+aipipe analyze --format java
 ```
 
 ## 📋 最佳实践
