@@ -27,22 +27,44 @@ func ProcessStdin(cfg *config.Config, showNotImportant bool) {
 			continue
 		}
 
-		// 简单的本地过滤逻辑
-		if shouldFilter(line) {
-			filteredCount++
-			if showNotImportant {
-				fmt.Printf("🔇 [过滤] %s\n", line)
+		// 使用 AI 分析日志
+		analysis, err := AnalyzeLog(line, "java", cfg)
+		if err != nil {
+			// AI 分析失败，使用简单过滤
+			if shouldFilter(line) {
+				filteredCount++
+				if showNotImportant {
+					fmt.Printf("🔇 [过滤] %s\n", line)
+				}
+				continue
 			}
-			continue
+			// 显示日志
+			fmt.Printf("⚠️  [重要] %s\n", line)
+			fmt.Printf("   📝 摘要: %s\n", generateSummary(line))
+			alertCount++
+		} else {
+			// AI 分析成功
+			if analysis.ShouldFilter {
+				filteredCount++
+				if showNotImportant {
+					fmt.Printf("🔇 [过滤] %s\n", line)
+					if analysis.Reason != "" {
+						fmt.Printf("   原因: %s\n", analysis.Reason)
+					}
+				}
+			} else {
+				// 重要日志，显示并发送通知
+				fmt.Printf("⚠️  [重要] %s\n", line)
+				fmt.Printf("   📝 摘要: %s\n", analysis.Summary)
+				if analysis.Reason != "" {
+					fmt.Printf("   原因: %s\n", analysis.Reason)
+				}
+				
+				// 发送通知
+				go sendNotification(analysis.Summary, line)
+				alertCount++
+			}
 		}
-
-		// 重要日志，显示并发送通知
-		fmt.Printf("⚠️  [重要] %s\n", line)
-		fmt.Printf("   📝 摘要: %s\n", generateSummary(line))
-
-		// 发送通知
-		go sendNotification(generateSummary(line), line)
-		alertCount++
 	}
 
 	if err := scanner.Err(); err != nil {
