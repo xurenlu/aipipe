@@ -1,287 +1,78 @@
-# AIPipe - Intelligent Log Monitoring Tool 🚀
-
-[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-macOS-lightgrey.svg)](https://www.apple.com/macos/)
-
-> **Revolutionary AI-powered log analysis that transforms chaos into clarity**
-
-AIPipe is a next-generation intelligent log monitoring and filtering tool that leverages configurable AI services to automatically analyze log content, filter noise, and deliver critical insights through smart notifications and contextual display.
-
-## 🌟 Why AIPipe Matters
-
-### The Problem We Solve
-
-**Traditional log monitoring is broken:**
-
-- 📊 **Information Overload**: 99% of logs are noise, drowning out critical issues
-- ⏰ **Alert Fatigue**: Constant false alarms desensitize teams to real problems  
-- 💰 **Cost Explosion**: Every log line costs money in cloud monitoring services
-- 🧠 **Human Error**: Manual log analysis is slow, inconsistent, and error-prone
-- 🔍 **Context Loss**: Important errors appear without surrounding context
-
-### The AIPipe Solution
-
-**Intelligent automation that actually works:**
-
-- 🤖 **AI-Powered Analysis**: Advanced AI understands log context and business impact
-- 📦 **Smart Batching**: 70-90% reduction in API costs through intelligent batching
-- ⚡ **Local Pre-filtering**: Instant filtering of DEBUG/INFO logs without API calls
-- 🎯 **Contextual Display**: Shows important logs with surrounding context
-- 🔔 **Smart Notifications**: Only alerts on genuinely important issues
-- ⚙️ **Fully Configurable**: Works with any AI service, customizable prompts
-
-## ✨ Key Features
-
-### 🧠 Intelligent Analysis
-- **Context-Aware AI**: Understands business impact, not just log levels
-- **Multi-Format Support**: Java, Python, PHP, Nginx, Ruby, FastAPI
-- **Custom Prompts**: Tailor AI behavior to your specific needs
-- **Conservative Strategy**: Defaults to filtering when uncertain (prevents false alarms)
-
-### 📦 Smart Batching
-- **Cost Optimization**: 70-90% reduction in API calls and costs
-- **Intelligent Timing**: Batches logs for 3 seconds or 10 lines, whichever comes first
-- **Bulk Analysis**: Single API call analyzes multiple log entries
-- **Unified Notifications**: One notification per batch instead of spam
-
-### ⚡ Performance Optimization
-- **Local Pre-filtering**: DEBUG/INFO logs filtered locally (10-30x faster)
-- **Multi-line Merging**: Automatically combines stack traces and exceptions
-- **Memory Efficient**: <50MB memory usage with streaming processing
-- **Real-time Processing**: <0.1s for local filtering, 1-3s for AI analysis
-
-### 🎯 User Experience
-- **Contextual Display**: Shows 3 lines before/after important logs
-- **Visual Indicators**: Clear markers for important vs. filtered logs
-- **macOS Integration**: Native notifications with sound alerts
-- **File Monitoring**: `tail -f` functionality with resume capability
-
-## 🚀 Quick Start
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/xurenlu/aipipe.git
-cd aipipe
-
-# Build the application
-go build -o aipipe aipipe.go
-
-# Or run directly
-go run aipipe.go -f /var/log/app.log --format java
-```
-
-### Configuration
-
-AIPipe automatically creates a configuration file on first run:
-
-```bash
-# Configuration file location
-~/.config/aipipe.json
-```
-
-**Example configuration:**
-```json
-{
-  "ai_endpoint": "https://your-ai-server.com/api/v1/chat/completions",
-  "token": "your-api-token-here",
-  "model": "gpt-4",
-  "custom_prompt": "Pay special attention to:\n1. Database connection issues\n2. Memory leak warnings\n3. Security-related logs\n4. Performance bottlenecks"
-}
-```
-
-### Basic Usage
-
-```bash
-# Monitor a log file (recommended)
-./aipipe -f /var/log/app.log --format java
-
-# Or via pipe
-tail -f /var/log/app.log | ./aipipe --format java
-
-# Show help
-./aipipe --help
-```
-
-## 📊 Performance Impact
-
-### Cost Savings
-| Metric | Traditional | AIPipe | Improvement |
-|--------|-------------|--------|-------------|
-| API Calls | 100 calls | 10 calls | ↓ 90% |
-| Token Usage | 64,500 tokens | 10,500 tokens | ↓ 83% |
-| Notifications | 15 alerts | 1-2 alerts | ↓ 87% |
-| Processing Time | 30s | 3s | ↓ 90% |
-
-### Real-World Results
-- **Production Environment**: 80% noise reduction, 90% cost savings
-- **Development Teams**: 5x faster issue identification
-- **DevOps Teams**: 70% reduction in alert fatigue
-- **Business Impact**: Faster incident response, reduced downtime
-
-## 🎯 Use Cases
-
-### Production Monitoring
-```bash
-# High-frequency production logs
-./aipipe -f /var/log/production.log --format java --batch-size 20
-```
-**Result**: Automatic noise filtering, critical issues highlighted, cost savings
-
-### Development Debugging
-```bash
-# Enhanced context for debugging
-./aipipe -f dev.log --format java --context 5 --verbose
-```
-**Result**: More context lines, detailed analysis reasons, faster problem resolution
-
-### Historical Analysis
-```bash
-# Analyze historical logs
-cat old.log | ./aipipe --format java --batch-size 50
-```
-**Result**: Quick identification of important events, problem pattern recognition
-
-## 🔧 Advanced Configuration
-
-### Batch Processing
-```bash
-# Large batches for high-frequency logs
-./aipipe -f app.log --format java --batch-size 20 --batch-wait 5s
-
-# Disable batching for real-time analysis
-./aipipe -f app.log --format java --no-batch
-```
-
-### Context Display
-```bash
-# More context for complex issues
-./aipipe -f app.log --format java --context 10
-
-# Show all logs including filtered ones
-./aipipe -f app.log --format java --show-not-important
-```
-
-### Debug Mode
-```bash
-# Full HTTP request/response logging
-./aipipe -f app.log --format java --debug --verbose
-```
-
-## 🛠️ Technical Architecture
-
-### Core Components
-- **Log Batcher**: Intelligent batching with configurable timing
-- **Local Filter**: Fast pre-filtering of low-level logs
-- **AI Analyzer**: Configurable AI service integration
-- **Context Merger**: Multi-line log combination
-- **Notification System**: macOS native notifications with sound
-
-### Supported Log Formats
-- **Java**: Spring Boot, Tomcat, Logback, Log4j
-- **Python**: Django, FastAPI, Flask, uWSGI
-- **PHP**: Laravel, Symfony, WordPress
-- **Nginx**: Access logs, error logs
-- **Ruby**: Rails, Sinatra, Puma
-- **Generic**: Any structured log format
-
-### AI Service Compatibility
-- **OpenAI**: GPT-3.5, GPT-4, GPT-4 Turbo
-- **Azure OpenAI**: All Azure OpenAI models
-- **Anthropic**: Claude models
-- **Custom APIs**: Any OpenAI-compatible endpoint
-
-## 📈 Business Value
-
-### For Development Teams
-- **Faster Debugging**: 5x faster issue identification
-- **Reduced Noise**: Focus on real problems, not log spam
-- **Better Context**: See the full picture around errors
-- **Cost Savings**: 70-90% reduction in monitoring costs
-
-### For DevOps Teams
-- **Alert Fatigue Reduction**: 70% fewer false alarms
-- **Incident Response**: Faster detection of critical issues
-- **Resource Optimization**: Reduced CPU and memory usage
-- **Scalability**: Handles high-volume log streams efficiently
-
-### For Business
-- **Reduced Downtime**: Faster issue detection and resolution
-- **Cost Optimization**: Significant reduction in monitoring costs
-- **Team Productivity**: Developers spend more time coding, less time debugging
-- **Reliability**: Proactive issue detection prevents outages
-
-## 🔒 Security & Privacy
-
-### Data Protection
-- **Local Processing**: Logs processed locally when possible
-- **Configurable Endpoints**: Use your own AI services
-- **No Data Storage**: No logs stored permanently
-- **Secure Configuration**: Sensitive data in local config files only
-
-### Privacy Features
-- **Configurable AI**: Choose your AI provider
-- **Local Filtering**: Most logs never leave your machine
-- **Custom Prompts**: Control what information is sent to AI
-- **Audit Trail**: Full visibility into what data is processed
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Go 1.21 or higher
-- macOS (for notifications)
-- AI service API key
-
-### Installation Steps
-1. **Clone the repository**
-2. **Build the application**
-3. **Configure your AI service**
-4. **Start monitoring your logs**
-
-### First Run
-```bash
-# This will create the default configuration
-./aipipe --format java --verbose
-
-# Edit the configuration file
-nano ~/.config/aipipe.json
-
-# Start monitoring
-./aipipe -f /var/log/your-app.log --format java
-```
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
-
-### Development Setup
-```bash
-git clone https://github.com/xurenlu/aipipe.git
-cd aipipe
-go mod tidy
-go build -o aipipe aipipe.go
-```
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **AI Service Providers**: For powerful AI capabilities
-- **Go Community**: For excellent tooling and libraries
-- **Open Source Contributors**: For inspiration and feedback
-
-## 🔗 Links
-
-- **GitHub Repository**: [https://github.com/xurenlu/aipipe](https://github.com/xurenlu/aipipe)
-- **Issues**: [Report bugs or request features](https://github.com/xurenlu/aipipe/issues)
-- **Discussions**: [Community discussions](https://github.com/xurenlu/aipipe/discussions)
+# AIPipe 完整文档
+
+> 基于 AI 的智能日志分析工具 - 完整使用指南
+
+## 📚 文档目录
+
+### 第一部分：快速开始
+- [01. 简介与安装](01-introduction.md) - 项目介绍、特性概览、安装指南
+- [02. 快速开始](02-quick-start.md) - 5分钟快速上手，基本使用示例
+
+### 第二部分：核心功能
+- [03. 日志分析](03-log-analysis.md) - AI 分析功能、格式支持、分析策略
+- [04. 文件监控](04-file-monitoring.md) - 实时监控、多文件管理、配置管理
+- [05. 通知系统](05-notifications.md) - 多渠道通知、配置指南、故障排除
+- [06. 规则引擎](06-rule-engine.md) - 过滤规则、正则表达式、规则管理
+
+### 第三部分：高级功能
+- [07. AI 服务管理](07-ai-services.md) - 多 AI 服务、负载均衡、故障转移
+- [08. 缓存系统](08-caching.md) - 性能优化、缓存策略、统计信息
+- [09. 配置管理](09-configuration.md) - 配置文件、环境变量、最佳实践
+- [10. 提示词管理](10-prompt-management.md) - 自定义提示词、模板系统
+
+### 第四部分：运维与部署
+- [11. 部署指南](11-deployment.md) - 生产环境部署、Docker、系统服务
+- [12. 监控与维护](12-monitoring.md) - 系统监控、日志管理、性能调优
+- [13. 故障排除](13-troubleshooting.md) - 常见问题、错误诊断、解决方案
+
+### 第五部分：开发与扩展
+- [14. 架构设计](14-architecture.md) - 系统架构、模块设计、技术选型
+- [15. 开发指南](15-development.md) - 开发环境、代码结构、贡献指南
+- [16. API 参考](16-api-reference.md) - 完整 API 文档、接口说明
+
+### 第六部分：附录
+- [17. 支持格式](17-supported-formats.md) - 支持的日志格式列表
+- [18. 示例集合](18-examples.md) - 实际使用案例、最佳实践
+- [19. 更新日志](19-changelog.md) - 版本历史、功能更新
+- [20. 常见问题](20-faq.md) - 常见问题解答
 
 ---
 
-**⭐ Star this project if it helps you!**
+## 🚀 快速导航
 
-*Transform your log monitoring from chaos to clarity with AIPipe.*
+### 新用户
+1. 阅读 [简介与安装](01-introduction.md)
+2. 按照 [快速开始](02-quick-start.md) 进行首次使用
+3. 根据需要查看具体功能章节
+
+### 有经验的用户
+- 直接查看 [API 参考](16-api-reference.md)
+- 参考 [示例集合](18-examples.md) 了解最佳实践
+- 查看 [故障排除](13-troubleshooting.md) 解决具体问题
+
+### 开发者
+- 从 [架构设计](14-architecture.md) 开始了解系统
+- 阅读 [开发指南](15-development.md) 参与开发
+- 查看 [API 参考](16-api-reference.md) 了解接口
+
+---
+
+## 📖 文档特点
+
+- **完整性**: 覆盖所有功能和使用场景
+- **结构化**: 按逻辑顺序组织，便于查找
+- **实用性**: 提供大量实际示例和最佳实践
+- **可维护性**: 模块化设计，便于更新和维护
+
+---
+
+## 🔄 文档更新
+
+本文档会随着项目发展持续更新，请关注：
+- 版本更新日志
+- GitHub Issues 和 Discussions
+- 项目主页的最新动态
+
+---
+
+*最后更新: 2024年12月*
