@@ -77,25 +77,25 @@ func showConfigStatus() {
 // 显示监听状态
 func showMonitoringStatus() {
 	fmt.Println("📁 监听状态:")
-	
+
 	// 加载监控配置
 	if err := loadMonitorConfig(); err != nil {
 		fmt.Printf("  ❌ 加载监控配置失败: %v\n", err)
 		return
 	}
-	
+
 	if len(monitorConfig.Files) == 0 {
 		fmt.Println("  📥 标准输入模式 (未监听文件)")
 		fmt.Printf("  📝 日志格式: %s\n", logFormat)
 	} else {
 		fmt.Printf("  📋 已配置 %d 个监控文件:\n", len(monitorConfig.Files))
-		
+
 		for i, file := range monitorConfig.Files {
 			status := "❌ 禁用"
 			if file.Enabled {
 				status = "✅ 启用"
 			}
-			
+
 			// 检查文件是否存在
 			if _, err := os.Stat(file.Path); err == nil {
 				if info, err := os.Stat(file.Path); err == nil {
@@ -109,7 +109,7 @@ func showMonitoringStatus() {
 			}
 		}
 	}
-	
+
 	fmt.Println()
 }
 
@@ -239,38 +239,38 @@ const monitorConfigFile = ".aipipe-monitor.json"
 // 加载监控配置
 func loadMonitorConfig() error {
 	configPath := filepath.Join(os.Getenv("HOME"), monitorConfigFile)
-	
+
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		// 配置文件不存在，使用默认配置
 		monitorConfig = MonitorConfig{Files: []MonitorFile{}}
 		return nil
 	}
-	
+
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return fmt.Errorf("读取监控配置文件失败: %w", err)
 	}
-	
+
 	if err := json.Unmarshal(data, &monitorConfig); err != nil {
 		return fmt.Errorf("解析监控配置文件失败: %w", err)
 	}
-	
+
 	return nil
 }
 
 // 保存监控配置
 func saveMonitorConfig() error {
 	configPath := filepath.Join(os.Getenv("HOME"), monitorConfigFile)
-	
+
 	data, err := json.MarshalIndent(monitorConfig, "", "  ")
 	if err != nil {
 		return fmt.Errorf("序列化监控配置失败: %w", err)
 	}
-	
+
 	if err := os.WriteFile(configPath, data, 0644); err != nil {
 		return fmt.Errorf("保存监控配置文件失败: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -395,7 +395,7 @@ func addMonitorFileInteractive() {
 		fmt.Printf("❌ 加载监控配置失败: %v\n", err)
 		return
 	}
-	
+
 	// 检查文件是否已存在
 	for _, existingFile := range monitorConfig.Files {
 		if existingFile.Path == filePath {
@@ -403,7 +403,7 @@ func addMonitorFileInteractive() {
 			return
 		}
 	}
-	
+
 	// 添加新文件到配置
 	newFile := MonitorFile{
 		Path:     filePath,
@@ -411,15 +411,15 @@ func addMonitorFileInteractive() {
 		Enabled:  true,
 		Priority: priority,
 	}
-	
+
 	monitorConfig.Files = append(monitorConfig.Files, newFile)
-	
+
 	// 保存配置
 	if err := saveMonitorConfig(); err != nil {
 		fmt.Printf("❌ 保存监控配置失败: %v\n", err)
 		return
 	}
-	
+
 	fmt.Printf("✅ 监控文件添加成功: %s (%s)\n", filePath, selectedFormat)
 	fmt.Println("💡 使用 'aipipe dashboard show' 查看当前状态")
 }
@@ -428,13 +428,13 @@ func addMonitorFileInteractive() {
 func listMonitorFiles() {
 	fmt.Println("📋 监控文件列表")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	
+
 	// 加载监控配置
 	if err := loadMonitorConfig(); err != nil {
 		fmt.Printf("❌ 加载监控配置失败: %v\n", err)
 		return
 	}
-	
+
 	if len(monitorConfig.Files) == 0 {
 		fmt.Println("📥 当前使用标准输入模式")
 		fmt.Printf("  格式: %s\n", logFormat)
@@ -444,7 +444,7 @@ func listMonitorFiles() {
 			if file.Enabled {
 				status = "✅ 启用"
 			}
-			
+
 			// 检查文件是否存在
 			if _, err := os.Stat(file.Path); err == nil {
 				absPath, _ := filepath.Abs(file.Path)
@@ -456,7 +456,7 @@ func listMonitorFiles() {
 			}
 		}
 	}
-	
+
 	fmt.Println()
 }
 
@@ -467,7 +467,7 @@ func removeMonitorFile(path string) {
 		fmt.Printf("❌ 加载监控配置失败: %v\n", err)
 		return
 	}
-	
+
 	// 查找并移除文件
 	found := false
 	for i, file := range monitorConfig.Files {
@@ -477,18 +477,18 @@ func removeMonitorFile(path string) {
 			break
 		}
 	}
-	
+
 	if !found {
 		fmt.Printf("❌ 未找到监控文件: %s\n", path)
 		return
 	}
-	
+
 	// 保存配置
 	if err := saveMonitorConfig(); err != nil {
 		fmt.Printf("❌ 保存监控配置失败: %v\n", err)
 		return
 	}
-	
+
 	fmt.Printf("✅ 已移除监控文件: %s\n", path)
 }
 
