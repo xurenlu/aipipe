@@ -122,12 +122,12 @@ func buildSystemPrompt(format string, cfg *config.Config) string {
 		}
 		// 如果文件加载失败，继续使用内置提示词
 	}
-	
+
 	// 如果配置了自定义提示词，使用自定义提示词
 	if cfg.CustomPrompt != "" {
 		return fmt.Sprintf("%s\n\n请分析以下 %s 格式的日志行：", cfg.CustomPrompt, format)
 	}
-	
+
 	// 使用默认内置提示词
 	return fmt.Sprintf(`你是一个专业的日志分析专家。请分析以下 %s 格式的日志行，判断其重要性。
 
@@ -158,20 +158,20 @@ func loadPromptFromFile(filePath, format string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("读取提示词文件失败: %w", err)
 	}
-	
+
 	prompt := string(content)
-	
+
 	// 如果提示词中包含 {format} 占位符，替换为实际的日志格式
 	if strings.Contains(prompt, "{format}") {
 		prompt = strings.ReplaceAll(prompt, "{format}", format)
 	}
-	
+
 	// 如果提示词中包含 {log_line} 占位符，说明这是完整的提示词模板
 	// 这种情况下，我们只需要返回提示词，不需要额外的格式说明
 	if strings.Contains(prompt, "{log_line}") {
 		return prompt, nil
 	}
-	
+
 	// 否则，添加格式说明
 	return fmt.Sprintf("%s\n\n请分析以下 %s 格式的日志行：", prompt, format), nil
 }

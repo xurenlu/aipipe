@@ -6,7 +6,12 @@ import (
 	"log"
 	"time"
 
+	"github.com/xurenlu/aipipe/internal/ai"
+	"github.com/xurenlu/aipipe/internal/cache"
 	"github.com/xurenlu/aipipe/internal/config"
+	"github.com/xurenlu/aipipe/internal/monitor"
+	"github.com/xurenlu/aipipe/internal/notification"
+	"github.com/xurenlu/aipipe/internal/rule"
 	"github.com/xurenlu/aipipe/internal/utils"
 )
 
@@ -40,6 +45,18 @@ var (
 	configFile  = flag.String("config", "", "指定配置文件路径")
 )
 
+// 全局配置变量
+var globalConfig *config.Config
+
+// 全局管理器
+var (
+	cacheManager      *cache.CacheManager
+	notificationManager *notification.NotificationManager
+	ruleEngine        *rule.RuleEngine
+	aiServiceManager  *ai.AIServiceManager
+	fileMonitor       *monitor.FileMonitor
+)
+
 func main() {
 	flag.Parse()
 
@@ -70,13 +87,21 @@ func main() {
 	}
 
 	// 加载配置文件
-	globalConfig, err := config.LoadConfig()
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Printf("⚠️  加载配置文件失败，使用默认配置: %v", err)
 		globalConfig = &config.DefaultConfig
+	} else {
+		globalConfig = cfg
 	}
 
+	// 初始化管理器
+	initializeManagers()
+
 	fmt.Printf("🚀 AIPipe 启动 - 监控 %s 格式日志\n", *logFormat)
+
+	// 显示功能状态
+	showFeatureStatus()
 
 	// 显示模式提示
 	if !*showNotImportant {
@@ -109,5 +134,81 @@ func main() {
 		fmt.Println("📥 从标准输入读取日志...")
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 		utils.ProcessStdin(globalConfig, *showNotImportant)
+	}
+}
+
+// 初始化所有管理器
+func initializeManagers() {
+	if globalConfig == nil {
+		log.Printf("⚠️  配置未加载，跳过管理器初始化")
+		return
+	}
+	
+	// 初始化缓存管理器
+	cacheManager = cache.NewCacheManager(globalConfig.Cache)
+	
+	// 初始化通知管理器
+	notificationManager = notification.NewNotificationManager(globalConfig)
+	
+	// 初始化规则引擎
+	ruleEngine = rule.NewRuleEngine(globalConfig.Rules)
+	
+	// 初始化 AI 服务管理器
+	aiServiceManager = ai.NewAIServiceManager(globalConfig.AIServices)
+	
+	// 初始化文件监控器
+	var err error
+	fileMonitor, err = monitor.NewFileMonitor()
+	if err != nil {
+		log.Printf("⚠️  文件监控器初始化失败: %v", err)
+	}
+}
+
+// 显示功能状态
+func showFeatureStatus() {
+	fmt.Println("🔧 功能状态:")
+	
+	if globalConfig == nil {
+		fmt.Println("   ❌ 配置未加载")
+		return
+	}
+	
+	// 缓存状态
+	if globalConfig.Cache.Enabled {
+		fmt.Println("   ✅ 缓存系统: 已启用")
+	} else {
+		fmt.Println("   ❌ 缓存系统: 已禁用")
+	}
+	
+	// 通知状态
+	if notificationManager != nil {
+		enabledNotifiers := notificationManager.GetEnabledCount()
+		fmt.Printf("   📢 通知系统: %d 个通知器已启用\n", enabledNotifiers)
+	} else {
+		fmt.Println("   ❌ 通知系统: 未初始化")
+	}
+	
+	// 规则引擎状态
+	if ruleEngine != nil {
+		stats := ruleEngine.GetStats()
+		fmt.Printf("   🔍 规则引擎: %d 个规则已启用\n", stats.EnabledRules)
+	} else {
+		fmt.Println("   ❌ 规则引擎: 未初始化")
+	}
+	
+	// AI 服务状态
+	if aiServiceManager != nil {
+		aiStats := aiServiceManager.GetStats()
+		fmt.Printf("   🤖 AI 服务: %d 个服务已启用\n", aiStats["enabled_services"])
+	} else {
+		fmt.Println("   ❌ AI 服务: 未初始化")
+	}
+	
+	// 文件监控状态
+	if fileMonitor != nil {
+		monitorStatus := fileMonitor.GetStatus()
+		fmt.Printf("   📁 文件监控: %d 个文件已监控\n", monitorStatus["active_files"])
+	} else {
+		fmt.Println("   ❌ 文件监控: 未启用")
 	}
 }

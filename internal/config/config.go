@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // 邮件配置
@@ -37,6 +38,97 @@ type NotifierConfig struct {
 	CustomWebhooks []WebhookConfig `json:"custom_webhooks,omitempty"`
 }
 
+// AI 服务配置
+type AIService struct {
+	Name     string `json:"name"`     // 服务名称
+	Endpoint string `json:"endpoint"` // API 端点
+	Token    string `json:"token"`    // API Token
+	Model    string `json:"model"`    // 模型名称
+	Priority int    `json:"priority"` // 优先级（数字越小优先级越高）
+	Enabled  bool   `json:"enabled"`  // 是否启用
+}
+
+// 过滤规则
+type FilterRule struct {
+	ID          string `json:"id"`          // 规则ID
+	Name        string `json:"name"`        // 规则名称
+	Pattern     string `json:"pattern"`     // 正则表达式模式
+	Action      string `json:"action"`      // 动作: filter, alert, ignore, highlight
+	Priority    int    `json:"priority"`    // 优先级（数字越小优先级越高）
+	Description string `json:"description"` // 规则描述
+	Enabled     bool   `json:"enabled"`     // 是否启用
+	Category    string `json:"category"`    // 规则分类
+	Color       string `json:"color"`       // 高亮颜色
+}
+
+// 缓存配置
+type CacheConfig struct {
+	MaxSize         int64         `json:"max_size"`         // 最大内存使用量（字节）
+	MaxItems        int           `json:"max_items"`        // 最大缓存项数
+	DefaultTTL      time.Duration `json:"default_ttl"`      // 默认过期时间
+	AITTL           time.Duration `json:"ai_ttl"`           // AI分析结果过期时间
+	RuleTTL         time.Duration `json:"rule_ttl"`         // 规则匹配过期时间
+	ConfigTTL       time.Duration `json:"config_ttl"`       // 配置缓存过期时间
+	CleanupInterval time.Duration `json:"cleanup_interval"` // 清理间隔
+	Enabled         bool          `json:"enabled"`          // 是否启用缓存
+}
+
+// 工作池配置
+type WorkerPoolConfig struct {
+	MaxWorkers   int           `json:"max_workers"`   // 最大工作协程数
+	QueueSize    int           `json:"queue_size"`    // 队列大小
+	BatchSize    int           `json:"batch_size"`    // 批处理大小
+	Timeout      time.Duration `json:"timeout"`       // 超时时间
+	RetryCount   int           `json:"retry_count"`   // 重试次数
+	BackoffDelay time.Duration `json:"backoff_delay"` // 退避延迟
+	Enabled      bool          `json:"enabled"`       // 是否启用
+}
+
+// 内存配置
+type MemoryConfig struct {
+	MaxMemoryUsage    int64         `json:"max_memory_usage"`    // 最大内存使用量（字节）
+	GCThreshold       int64         `json:"gc_threshold"`        // 垃圾回收阈值
+	LeakDetection     bool          `json:"leak_detection"`      // 是否启用内存泄漏检测
+	ProfilingInterval time.Duration `json:"profiling_interval"`  // 性能分析间隔
+	Enabled           bool          `json:"enabled"`             // 是否启用内存优化
+}
+
+// 并发控制配置
+type ConcurrencyConfig struct {
+	MaxConcurrency    int           `json:"max_concurrency"`    // 最大并发数
+	BackpressureLimit int           `json:"backpressure_limit"` // 背压限制
+	QueueTimeout      time.Duration `json:"queue_timeout"`      // 队列超时时间
+	RetryDelay        time.Duration `json:"retry_delay"`        // 重试延迟
+	Enabled           bool          `json:"enabled"`            // 是否启用并发控制
+}
+
+// I/O配置
+type IOConfig struct {
+	BufferSize        int           `json:"buffer_size"`        // 缓冲区大小
+	BatchSize         int           `json:"batch_size"`         // 批处理大小
+	FlushInterval     time.Duration `json:"flush_interval"`     // 刷新间隔
+	AsyncIO           bool          `json:"async_io"`           // 是否启用异步I/O
+	Compression       bool          `json:"compression"`        // 是否启用压缩
+	Enabled           bool          `json:"enabled"`            // 是否启用I/O优化
+}
+
+// 多源配置
+type MultiSourceConfig struct {
+	Enabled bool           `json:"enabled"` // 是否启用多源支持
+	Sources []SourceConfig `json:"sources"` // 数据源列表
+}
+
+// 数据源配置
+type SourceConfig struct {
+	Name     string `json:"name"`     // 数据源名称
+	Type     string `json:"type"`     // 数据源类型 (file, journald, syslog)
+	Path     string `json:"path"`     // 文件路径或配置
+	Format   string `json:"format"`   // 日志格式
+	Enabled  bool   `json:"enabled"`  // 是否启用
+	Priority int    `json:"priority"` // 优先级
+}
+
+
 // 输出格式配置
 type OutputFormat struct {
 	Type     string `json:"type"`     // json, csv, table, custom
@@ -57,18 +149,47 @@ type LogLevelConfig struct {
 
 // 主配置结构
 type Config struct {
-	AIEndpoint   string         `json:"ai_endpoint"`
-	Token        string         `json:"token"`
-	Model        string         `json:"model"`
+	AIEndpoint   string         `json:"ai_endpoint"` // 向后兼容
+	Token        string         `json:"token"`       // 向后兼容
+	Model        string         `json:"model"`       // 向后兼容
 	CustomPrompt string         `json:"custom_prompt"`
 	PromptFile   string         `json:"prompt_file"`   // 提示词文件路径
-	MaxRetries   int            `json:"max_retries"`
-	Timeout      int            `json:"timeout"`
-	RateLimit    int            `json:"rate_limit"`
-	LocalFilter  bool           `json:"local_filter"`
-	OutputFormat OutputFormat   `json:"output_format"`
-	LogLevel     LogLevelConfig `json:"log_level"`
 	Notifiers    NotifierConfig `json:"notifiers"`
+
+	// 新增配置项
+	MaxRetries  int  `json:"max_retries"`  // API 重试次数
+	Timeout     int  `json:"timeout"`      // 请求超时时间（秒）
+	RateLimit   int  `json:"rate_limit"`   // 请求频率限制（每分钟）
+	LocalFilter bool `json:"local_filter"` // 是否启用本地过滤
+
+	// 多AI服务支持
+	AIServices []AIService `json:"ai_services"` // AI 服务列表
+	DefaultAI  string      `json:"default_ai"`  // 默认AI服务名称
+
+	// 规则引擎配置
+	Rules []FilterRule `json:"rules"` // 过滤规则列表
+
+	// 缓存配置
+	Cache CacheConfig `json:"cache"` // 缓存配置
+
+	// 工作池配置
+	WorkerPool WorkerPoolConfig `json:"worker_pool"` // 工作池配置
+
+	// 内存优化配置
+	Memory MemoryConfig `json:"memory"` // 内存优化配置
+
+	// 并发控制配置
+	Concurrency ConcurrencyConfig `json:"concurrency"` // 并发控制配置
+
+	// I/O优化配置
+	IO IOConfig `json:"io"`
+
+	// 用户体验配置
+	OutputFormat OutputFormat   `json:"output_format"`
+	LogLevel     LogLevelConfig `json:"log_level"` // I/O优化配置
+
+	// 多源支持
+	MultiSource MultiSourceConfig `json:"multi_source"`
 }
 
 // 默认配置变量
@@ -86,6 +207,54 @@ func init() {
 		Timeout:      30,
 		RateLimit:    60,
 		LocalFilter:  true,
+		AIServices:   []AIService{},
+		DefaultAI:    "",
+		Rules:        []FilterRule{},
+		Cache: CacheConfig{
+			MaxSize:         100 * 1024 * 1024, // 100MB
+			MaxItems:        1000,
+			DefaultTTL:      5 * time.Minute,
+			AITTL:           10 * time.Minute,
+			RuleTTL:         30 * time.Minute,
+			ConfigTTL:       1 * time.Hour,
+			CleanupInterval: 5 * time.Minute,
+			Enabled:         true,
+		},
+		WorkerPool: WorkerPoolConfig{
+			MaxWorkers:   4,
+			QueueSize:    1000,
+			BatchSize:    10,
+			Timeout:      30 * time.Second,
+			RetryCount:   3,
+			BackoffDelay: 1 * time.Second,
+			Enabled:      true,
+		},
+		Memory: MemoryConfig{
+			MaxMemoryUsage:    512 * 1024 * 1024, // 512MB
+			GCThreshold:       128 * 1024 * 1024, // 128MB
+			LeakDetection:     true,
+			ProfilingInterval: 30 * time.Second,
+			Enabled:           true,
+		},
+		Concurrency: ConcurrencyConfig{
+			MaxConcurrency:    100,
+			BackpressureLimit: 1000,
+			QueueTimeout:      5 * time.Second,
+			RetryDelay:        1 * time.Second,
+			Enabled:           true,
+		},
+		IO: IOConfig{
+			BufferSize:    64 * 1024, // 64KB
+			BatchSize:     10,
+			FlushInterval: 1 * time.Second,
+			AsyncIO:       true,
+			Compression:   false,
+			Enabled:       true,
+		},
+		MultiSource: MultiSourceConfig{
+			Enabled: false,
+			Sources: []SourceConfig{},
+		},
 		OutputFormat: OutputFormat{
 			Type:     "table",
 			Template: "",
