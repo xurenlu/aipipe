@@ -22,7 +22,7 @@ var analyzeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("🚀 AIPipe 分析模式 - 监控 %s 格式日志\n", logFormat)
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		
+
 		// 从标准输入读取日志
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)

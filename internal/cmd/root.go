@@ -11,7 +11,7 @@ import (
 var (
 	// 全局配置
 	globalConfig *config.Config
-	
+
 	// 全局标志
 	verbose          bool
 	showNotImportant bool

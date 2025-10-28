@@ -97,13 +97,13 @@ var rulesListCmd = &cobra.Command{
 
 		fmt.Printf("📋 规则列表 (共 %d 个):\n", len(rules))
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		
+
 		for _, rule := range rules {
 			status := "❌ 禁用"
 			if rule.Enabled {
 				status = "✅ 启用"
 			}
-			
+
 			fmt.Printf("ID: %s\n", rule.ID)
 			fmt.Printf("  名称: %s\n", rule.Name)
 			fmt.Printf("  模式: %s\n", rule.Pattern)
@@ -219,7 +219,7 @@ var rulesStatsCmd = &cobra.Command{
 		fmt.Printf("启用规则: %d\n", stats.EnabledRules)
 		fmt.Printf("禁用规则: %d\n", stats.DisabledRules)
 		fmt.Printf("最后更新: %s\n", stats.LastUpdated.Format("2006-01-02 15:04:05"))
-		
+
 		if len(stats.MatchCounts) > 0 {
 			fmt.Println("\n匹配统计:")
 			for ruleID, count := range stats.MatchCounts {
@@ -231,7 +231,7 @@ var rulesStatsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(rulesCmd)
-	
+
 	// 添加规则子命令
 	rulesCmd.AddCommand(rulesAddCmd)
 	rulesCmd.AddCommand(rulesListCmd)

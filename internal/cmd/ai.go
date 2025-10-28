@@ -49,13 +49,13 @@ var aiListCmd = &cobra.Command{
 
 		fmt.Printf("📋 AI服务列表 (共 %d 个):\n", len(services))
 		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		
+
 		for _, service := range services {
 			status := "❌ 禁用"
 			if service.Enabled {
 				status = "✅ 启用"
 			}
-			
+
 			fmt.Printf("名称: %s\n", service.Name)
 			fmt.Printf("  端点: %s\n", service.Endpoint)
 			fmt.Printf("  模型: %s\n", service.Model)
@@ -114,7 +114,7 @@ var aiRemoveCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		serviceName := args[0]
-		
+
 		// 查找并删除服务
 		found := false
 		for i, service := range globalConfig.AIServices {
@@ -215,7 +215,7 @@ var aiTestCmd = &cobra.Command{
 		fmt.Printf("🧪 测试AI服务: %s\n", serviceName)
 		fmt.Printf("   端点: %s\n", service.Endpoint)
 		fmt.Printf("   模型: %s\n", service.Model)
-		
+
 		// 这里可以添加实际的API测试逻辑
 		fmt.Println("✅ AI服务测试完成 (模拟)")
 	},
@@ -242,7 +242,7 @@ var aiStatsCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(aiCmd)
-	
+
 	// 添加AI子命令
 	aiCmd.AddCommand(aiListCmd)
 	aiCmd.AddCommand(aiAddCmd)

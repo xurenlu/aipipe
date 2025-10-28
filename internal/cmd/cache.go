@@ -47,16 +47,16 @@ var cacheClearCmd = &cobra.Command{
 	Long:  "清理所有缓存数据",
 	Run: func(cmd *cobra.Command, args []string) {
 		cacheManager := cache.NewCacheManager(globalConfig.Cache)
-		
+
 		// 获取清理前的统计
 		statsBefore := cacheManager.GetStats()
-		
+
 		// 清理缓存
 		cacheManager.Clear()
-		
+
 		// 获取清理后的统计
 		statsAfter := cacheManager.GetStats()
-		
+
 		fmt.Printf("✅ 缓存清理完成\n")
 		fmt.Printf("   清理前: %d 个项目\n", statsBefore.TotalItems)
 		fmt.Printf("   清理后: %d 个项目\n", statsAfter.TotalItems)
@@ -79,11 +79,11 @@ var cacheStatusCmd = &cobra.Command{
 		fmt.Printf("规则TTL: %s\n", globalConfig.Cache.RuleTTL)
 		fmt.Printf("配置TTL: %s\n", globalConfig.Cache.ConfigTTL)
 		fmt.Printf("清理间隔: %s\n", globalConfig.Cache.CleanupInterval)
-		
+
 		if globalConfig.Cache.Enabled {
 			cacheManager := cache.NewCacheManager(globalConfig.Cache)
 			stats := cacheManager.GetStats()
-			
+
 			fmt.Println("\n📊 当前状态:")
 			fmt.Printf("缓存项目: %d\n", stats.TotalItems)
 			fmt.Printf("内存使用: %d 字节 (%.2f MB)\n", stats.MemoryUsage, float64(stats.MemoryUsage)/1024/1024)
@@ -94,7 +94,7 @@ var cacheStatusCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(cacheCmd)
-	
+
 	// 添加缓存子命令
 	cacheCmd.AddCommand(cacheStatsCmd)
 	cacheCmd.AddCommand(cacheClearCmd)

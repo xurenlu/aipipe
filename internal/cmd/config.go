@@ -71,7 +71,7 @@ var configTestCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(configCmd)
-	
+
 	// 添加配置子命令
 	configCmd.AddCommand(configInitCmd)
 	configCmd.AddCommand(configShowCmd)

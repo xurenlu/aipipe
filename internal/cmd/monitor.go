@@ -44,19 +44,19 @@ var monitorCmd = &cobra.Command{
 			// 处理新日志行
 			processLogLine(line, logFormat)
 		})
-		
+
 		if err != nil {
 			fmt.Printf("❌ 添加文件监控失败: %v\n", err)
 			return
 		}
 
 		fmt.Println("✅ 文件监控已启动，按 Ctrl+C 停止")
-		
+
 		// 等待中断信号
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		<-c
-		
+
 		fmt.Println("\n🛑 监控已停止")
 	},
 }
