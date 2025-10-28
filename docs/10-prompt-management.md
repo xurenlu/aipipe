@@ -72,8 +72,13 @@ AIPipe 的提示词管理系统允许用户自定义 AI 分析提示词，优化
 AIPipe 支持通过配置文件指定自定义提示词文件：
 
 ```bash
-# 配置提示词文件
-aipipe config set --key "prompt_file" --value "prompts/custom.txt"
+# 编辑配置文件，添加提示词文件路径
+nano ~/.aipipe/config.json
+
+# 在配置文件中添加：
+# {
+#   "prompt_file": "prompts/custom.txt"
+# }
 
 # 使用配置的提示词文件
 aipipe analyze --format java

@@ -73,13 +73,7 @@ aipipe cache clear --key "error_logs"
 
 ### 3. 缓存预热
 
-```bash
-# 预热缓存
-aipipe cache warmup
-
-# 预热特定缓存
-aipipe cache warmup --pattern "ERROR.*"
-```
+AIPipe 目前不支持缓存预热功能。缓存会在使用过程中自动填充。
 
 ## ⚙️ 缓存配置
 

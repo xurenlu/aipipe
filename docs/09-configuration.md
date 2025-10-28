@@ -79,12 +79,14 @@ aipipe config summary
 
 ### 3. 设置配置
 
-```bash
-# 设置配置值
-aipipe config set --key "ai_model" --value "gpt-4"
+AIPipe 目前不支持通过命令行直接设置配置值。需要手动编辑配置文件：
 
-# 设置嵌套配置
-aipipe config set --key "notifications.email.enabled" --value "true"
+```bash
+# 编辑配置文件
+nano ~/.aipipe/config.json
+
+# 或者使用其他编辑器
+vim ~/.aipipe/config.json
 ```
 
 ### 4. 验证配置

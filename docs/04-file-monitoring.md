@@ -144,14 +144,14 @@ aipipe dashboard remove
 ### 3. 文件状态管理
 
 ```bash
-# 启用文件监控
-aipipe dashboard enable /var/log/app.log
+# 查看文件状态
+aipipe dashboard show
 
-# 禁用文件监控
-aipipe dashboard disable /var/log/app.log
+# 列出所有监控文件
+aipipe dashboard list
 
-# 检查文件状态
-aipipe dashboard status /var/log/app.log
+# 移除监控文件
+aipipe dashboard remove /var/log/app.log
 ```
 
 ## 🔄 监控模式
