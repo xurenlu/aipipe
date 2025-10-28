@@ -123,8 +123,80 @@ go run ./main.go --config-template > ~/.config/aipipe.json
 3. 保持包的职责单一，避免循环依赖
 4. 添加适当的单元测试
 
+## 提示词管理
+
+AIPipe 支持自定义 AI 提示词，可以通过以下方式配置：
+
+### 1. 使用提示词文件
+
+```bash
+# 在配置文件中指定提示词文件
+{
+  "prompt_file": "prompts/advanced.txt"
+}
+
+# 或者使用环境变量
+AIPIPE_CONFIG=my-config.json go run ./main.go
+```
+
+### 2. 提示词文件格式
+
+提示词文件支持以下占位符：
+- `{format}`: 日志格式（如 java、php、nginx 等）
+- `{log_line}`: 要分析的日志行
+
+示例提示词文件 (`prompts/advanced.txt`)：
+```
+你是一个专业的日志分析专家，具有丰富的系统运维和故障排查经验。请分析以下 {format} 格式的日志行，判断其重要性。
+
+## 分析规则
+
+### 重要日志（should_filter: false）：
+- 错误级别：ERROR、FATAL、CRITICAL、PANIC
+- 异常信息：Exception、Error、Failed、Timeout
+- 安全事件：Security、Auth、Permission、Access denied
+- 性能问题：Slow、Timeout、Memory、CPU、Disk
+- 系统故障：Crash、Restart、Shutdown、Connection refused
+- 业务异常：Transaction failed、Payment error、User blocked
+
+### 不重要日志（should_filter: true）：
+- 调试信息：DEBUG、TRACE、VERBOSE
+- 正常操作：INFO、Started、Stopped、Connected
+- 健康检查：Health check、Ping、Pong、Heartbeat
+- 常规统计：Statistics、Metrics、Count、Rate
+- 配置加载：Config loaded、Settings applied
+
+## 输出格式
+
+请返回JSON格式：
+{
+  "should_filter": true/false,
+  "summary": "简要摘要（不超过50字）",
+  "reason": "详细判断原因（不超过200字）",
+  "confidence": 0.0-1.0
+}
+
+请分析这条日志行：
+{log_line}
+```
+
+### 3. 内置提示词
+
+如果不指定 `prompt_file`，AIPipe 会使用内置的专业提示词。
+
+### 4. 自定义提示词
+
+也可以通过 `custom_prompt` 配置项直接指定提示词：
+
+```json
+{
+  "custom_prompt": "你是一个日志分析助手，请判断以下日志是否重要..."
+}
+```
+
 ## 注意事项
 
 - 原始的 `aipipe.go` 文件保留作为参考，但不再使用
 - 所有新的开发都应该基于新的包结构
 - 配置文件的格式保持不变，向后兼容
+- 提示词文件支持 UTF-8 编码，建议使用 `.txt` 扩展名

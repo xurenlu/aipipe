@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -47,7 +48,7 @@ func AnalyzeLog(logLine string, format string, cfg *config.Config) (*LogAnalysis
 	}
 
 	// 构建系统提示词和用户提示词
-	systemPrompt := buildSystemPrompt(format)
+	systemPrompt := buildSystemPrompt(format, cfg)
 	userPrompt := buildUserPrompt(logLine)
 
 	// 调用 AI API
@@ -113,7 +114,21 @@ func tryLocalFilter(logLine string) *LogAnalysis {
 }
 
 // 构建系统提示词
-func buildSystemPrompt(format string) string {
+func buildSystemPrompt(format string, cfg *config.Config) string {
+	// 如果指定了提示词文件，尝试从文件加载
+	if cfg.PromptFile != "" {
+		if prompt, err := loadPromptFromFile(cfg.PromptFile, format); err == nil {
+			return prompt
+		}
+		// 如果文件加载失败，继续使用内置提示词
+	}
+	
+	// 如果配置了自定义提示词，使用自定义提示词
+	if cfg.CustomPrompt != "" {
+		return fmt.Sprintf("%s\n\n请分析以下 %s 格式的日志行：", cfg.CustomPrompt, format)
+	}
+	
+	// 使用默认内置提示词
 	return fmt.Sprintf(`你是一个专业的日志分析专家。请分析以下 %s 格式的日志行，判断其重要性。
 
 分析规则：
@@ -135,6 +150,30 @@ func buildSystemPrompt(format string) string {
 // 构建用户提示词
 func buildUserPrompt(logLine string) string {
 	return fmt.Sprintf("请分析这条日志行：\n%s", logLine)
+}
+
+// 从文件加载提示词
+func loadPromptFromFile(filePath, format string) (string, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("读取提示词文件失败: %w", err)
+	}
+	
+	prompt := string(content)
+	
+	// 如果提示词中包含 {format} 占位符，替换为实际的日志格式
+	if strings.Contains(prompt, "{format}") {
+		prompt = strings.ReplaceAll(prompt, "{format}", format)
+	}
+	
+	// 如果提示词中包含 {log_line} 占位符，说明这是完整的提示词模板
+	// 这种情况下，我们只需要返回提示词，不需要额外的格式说明
+	if strings.Contains(prompt, "{log_line}") {
+		return prompt, nil
+	}
+	
+	// 否则，添加格式说明
+	return fmt.Sprintf("%s\n\n请分析以下 %s 格式的日志行：", prompt, format), nil
 }
 
 // 调用 AI API

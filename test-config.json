@@ -1,0 +1,55 @@
+{
+  "ai_endpoint": "https://ffjy-jp.openai.azure.com/openai/deployments/gpt-5-mini/chat/completions?api-version=2025-01-01-preview",
+  "token": "25LbRXXw...ACOGhsGV",
+  "model": "gpt-5-mini",
+  "custom_prompt": "",
+  "prompt_file": "prompts/advanced.txt",
+  "max_retries": 3,
+  "timeout": 30,
+  "rate_limit": 60,
+  "local_filter": true,
+  "output_format": {
+    "type": "table",
+    "template": "",
+    "color": true
+  },
+  "log_level": {
+    "level": "info",
+    "min_level": "info",
+    "show_debug": false,
+    "show_info": true,
+    "show_warn": true,
+    "show_error": true,
+    "show_fatal": true
+  },
+  "notifiers": {
+    "email": {
+      "enabled": false,
+      "provider": "smtp",
+      "host": "",
+      "port": 587,
+      "username": "",
+      "password": "",
+      "from_email": "",
+      "to_emails": []
+    },
+    "dingtalk": {
+      "enabled": false,
+      "url": "",
+      "secret": ""
+    },
+    "wechat": {
+      "enabled": false,
+      "url": ""
+    },
+    "feishu": {
+      "enabled": false,
+      "url": ""
+    },
+    "slack": {
+      "enabled": false,
+      "url": ""
+    },
+    "custom_webhooks": []
+  }
+}

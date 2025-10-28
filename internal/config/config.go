@@ -61,6 +61,7 @@ type Config struct {
 	Token        string         `json:"token"`
 	Model        string         `json:"model"`
 	CustomPrompt string         `json:"custom_prompt"`
+	PromptFile   string         `json:"prompt_file"`   // 提示词文件路径
 	MaxRetries   int            `json:"max_retries"`
 	Timeout      int            `json:"timeout"`
 	RateLimit    int            `json:"rate_limit"`
@@ -80,6 +81,7 @@ func init() {
 		Token:        "your-api-token-here",
 		Model:        "gpt-4",
 		CustomPrompt: "",
+		PromptFile:   "prompts/advanced.txt", // 提示词文件路径
 		MaxRetries:   3,
 		Timeout:      30,
 		RateLimit:    60,
